@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>뉴스&홍보 – 무한 스크롤 + 탭</title>
+<style>
+  :root{ --bg:#f5f6f8; --card:#fff; --ink:#222; --ink2:#666; --line:#e9e9ee; --brand:#0b5bd3; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans KR",Arial,sans-serif;color:var(--ink)}
+
+  /* Header */
+  header{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);z-index:20}
+  .bar{max-width:520px;margin:0 auto;display:flex;align-items:center;gap:8px;padding:10px 12px}
+  .chip{min-width:34px;height:34px;border:1px solid var(--line);border-radius:10px;display:grid;place-items:center;background:#fff}
+  .title{font-weight:700;margin-left:6px}
+  .bar-right{margin-left:auto;display:flex;gap:8px}
+
+  /* Tabs */
+  .tabs{max-width:520px;margin:0 auto;display:flex;gap:10px;padding:10px 12px 6px;background:#fff;position:sticky;top:56px;z-index:19;border-bottom:1px solid var(--line)}
+  .tab{padding:7px 14px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:14px;cursor:pointer}
+  .tab.is-active{background:var(--brand);border-color:var(--brand);color:#fff}
+
+  /* Page */
+  .wrap{max-width:520px;margin:0 auto;padding:10px 12px 40px}
+
+  /* List + virtual spacer */
+  #topSpacer,#bottomSpacer{height:0}
+  .list{display:block}
+  .card{background:var(--card);border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.06);padding:12px;margin-bottom:14px}
+
+  /* Slider inside card */
+  .mini-slider{position:relative;border-radius:12px;overflow:hidden;background:#ddd}
+  .mini-slides{display:flex;transition:transform .35s ease}
+  .mini-slide{min-width:100%}
+  .mini-slide img{
+    display:block;width:100%;aspect-ratio:4/5;object-fit:cover; /* 280×350 비율 유지 */
+    /* 고정 280×350 원하면 아래 주석 해제
+    width:280px;height:350px;margin:0 auto;object-fit:cover;
+    */
+  }
+  .mini-nav{position:absolute;top:50%;left:0;right:0;display:flex;justify-content:space-between;transform:translateY(-50%);pointer-events:none;opacity:0;transition:opacity .2s}
+  .mini-nav button{pointer-events:auto;border:none;background:rgba(0,0,0,.35);color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer}
+  .mini-slider.show-nav .mini-nav{opacity:1}
+
+  .mini-dots{display:flex;gap:8px;justify-content:center;align-items:center;padding:10px 0 6px}
+  .mini-dot{width:8px;height:8px;border-radius:50%;background:#cfd3da;cursor:pointer}
+  .mini-dot.active{background:var(--brand)}
+
+  /* Caption: first line + more */
+  .caption{margin-top:2px;font-size:14px;line-height:1.55;color:#222;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden}
+  .caption.expanded{-webkit-line-clamp:unset;display:block}
+  .more-btn{display:inline-flex;gap:4px;align-items:center;margin-top:6px;padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:12px;color:#333;cursor:pointer}
+  .more-btn[hidden]{display:none!important}
+
+  .meta{display:flex;justify-content:flex-end;color:#666;font-size:12px;margin-top:6px}
+  .sentinel{height:24px}
+</style>
+</head>
+<body>
+  <header>
+    <div class="bar">
+      <div class="chip" aria-label="뒤로">←</div>
+      <div class="title">뉴스&홍보</div>
+      <div class="bar-right">
+        <div class="chip" aria-label="홈">🏠</div>
+        <div class="chip" aria-label="메뉴">≡</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <div class="tabs" role="tablist" aria-label="뉴스/홍보">
+    <button class="tab is-active" id="tab-news" role="tab" aria-selected="true" data-type="news">뉴스</button>
+    <button class="tab" id="tab-pr" role="tab" aria-selected="false" data-type="pr">홍보</button>
+  </div>
+
+  <main class="wrap">
+    <div id="topSpacer"></div>
+    <section id="list" class="list" aria-label="목록"></section>
+    <div id="bottomSpacer"></div>
+    <div id="sentinel" class="sentinel" aria-hidden="true"></div>
+  </main>
+
+<script>
+/* =========================
+   Client state
+========================= */
+let currentType = 'news';
+const PAGE_SIZE = 20;
+const MAX_DOM_CARDS = 120;
+const EST_CARD_HEIGHT = 470;
+
+let nextCursor = null;
+let reachedEnd = false;
+let loading = false;
+
+let topRemovedCount = 0;
+let topSpacerPx = 0;
+
+const listEl = document.getElementById('list');
+const topSpacer = document.getElementById('topSpacer');
+const sentinel = document.getElementById('sentinel');
+
+/* =========================
+   Tabs: reset & reload
+========================= */
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    if (tab.classList.contains('is-active')) return;
+    document.querySelectorAll('.tab').forEach(t=>{ t.classList.remove('is-active'); t.setAttribute('aria-selected','false'); });
+    tab.classList.add('is-active'); tab.setAttribute('aria-selected','true');
+    currentType = tab.dataset.type;
+
+    // reset paging / list
+    nextCursor = null; reachedEnd = false; loading = false;
+    topRemovedCount = 0; topSpacerPx = 0; topSpacer.style.height = '0';
+    listEl.innerHTML = '';
+
+    loadNextPage();
+  });
+});
+
+
+/* =========================
+   API (replace with real one)
+========================= */
+const dummyTexts = [
+  "깡세 거래 위험! 집주인이 채무를 상환하지 않은 상태...",
+  "전세 사기 주의보, 임차인 피해 급증!",
+  "비트코인 ETF, 연말 장세 변수 될까?",
+  "신제품 출시 홍보 이벤트 안내",
+  "지역 사회 봉사활동 현장 스케치",
+  "오늘의 부동산 시장 요약 리포트",
+  "국제 유가 변동과 경제 전망",
+  "주택담보대출 금리 변동성 확대"
+];
+
+async function fetchPageFromServer(type, cursor, limit){
+  // MOCK for demo
+  await new Promise(r=>setTimeout(r,250));
+  const start = cursor ? parseInt(cursor,10) : 0;
+  const end = start + limit;
+  const items=[];
+  for(let i=start;i<end;i++){
+    const id = `${type}-${i}`;
+    // 1. 랜덤 텍스트
+    const randTxt = dummyTexts[Math.floor(Math.random()*dummyTexts.length)];
+    // 2. 랜덤 이미지 (picsum seed)
+    const randSeed = Math.floor(Math.random()*10000);
+    items.push({
+      id,
+      title: `[${type.toUpperCase()}] ${randTxt}`,
+      images: [
+        `https://picsum.photos/seed/${type}-${randSeed}-1/560/700`,
+        `https://picsum.photos/seed/${type}-${randSeed}-2/560/700`
+      ],
+      date: new Date(Date.now()-i*86400000).toISOString().slice(0,10)
+    });
+  }
+  const mockTotal = 10000;
+  return { items, nextCursor: end>=mockTotal ? null : String(end) };
+}
+
+
+
+/* =========================
+   Infinite + Virtual Scroll
+========================= */
+async function loadNextPage(){
+  if (loading || reachedEnd) return;
+  loading = true;
+  try{
+    const {items, nextCursor: nc} = await fetchPageFromServer(currentType, nextCursor, PAGE_SIZE);
+    nextCursor = nc;
+    if (!items || !items.length) { reachedEnd = true; }
+    else { appendCards(items); if (!nc) reachedEnd = true; }
+  } finally { loading = false; }
+}
+
+function appendCards(items){
+  for(const row of items){
+    listEl.appendChild(buildCard(row));
+  }
+  virtualTrimIfNeeded();
+}
+
+function virtualTrimIfNeeded(){
+  const cards = listEl.children.length;
+  if (cards <= MAX_DOM_CARDS) return;
+
+  const removeCount = Math.min(cards - MAX_DOM_CARDS, Math.floor(MAX_DOM_CARDS/2));
+  let removedHeight = 0;
+  for(let i=0;i<removeCount;i++){
+    const first = listEl.firstElementChild;
+    if(!first) break;
+    removedHeight += first.getBoundingClientRect().height || EST_CARD_HEIGHT;
+    listEl.removeChild(first);
+    topRemovedCount++;
+  }
+  topSpacerPx += removedHeight;
+  topSpacer.style.height = topSpacerPx + 'px';
+  window.scrollBy(0, -removedHeight);
+}
+
+/* Trigger */
+const io = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{ if(e.isIntersecting) loadNextPage(); });
+}, {root:null, rootMargin:'800px 0px 800px 0px', threshold:0});
+io.observe(sentinel);
+
+/* =========================
+   Card builder
+========================= */
+function buildCard(row){
+  const card = document.createElement('article');
+  card.className = 'card';
+  const imgs = (row.images && row.images.length) ? row.images : [placeholder()];
+
+  card.innerHTML = `
+    <div class="mini-slider" data-index="0">
+      <div class="mini-slides"></div>
+      <div class="mini-nav">
+        <button class="mini-prev" aria-label="이전">‹</button>
+        <button class="mini-next" aria-label="다음">›</button>
+      </div>
+    </div>
+    <div class="mini-dots"></div>
+
+    <div>
+      <div class="caption" tabindex="0" role="button" aria-expanded="false"></div>
+      <button class="more-btn" type="button">… 더보기</button>
+    </div>
+
+    <div class="meta">${row.date}</div>
+  `;
+
+  const cap = card.querySelector('.caption');
+  const btn = card.querySelector('.more-btn');
+  cap.textContent = row.title;
+
+  btn.addEventListener('click', ()=>{
+    const expanded = cap.classList.toggle('expanded');
+    cap.setAttribute('aria-expanded', expanded);
+    btn.textContent = expanded ? '접기' : '… 더보기';
+  });
+  cap.addEventListener('click', ()=>btn.click());
+  cap.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); btn.click(); } });
+
+  requestAnimationFrame(()=>{ btn.hidden = !(cap.scrollHeight > cap.clientHeight + 1); });
+
+  buildMiniSlider(card, imgs);
+  return card;
+}
+
+/* =========================
+   Slider inside card
+========================= */
+function buildMiniSlider(card, srcs){
+  const slider = card.querySelector('.mini-slider');
+  const slidesEl = card.querySelector('.mini-slides');
+  const dotsEl = card.querySelector('.mini-dots');
+
+  slidesEl.innerHTML=''; dotsEl.innerHTML='';
+
+  srcs.forEach((src,i)=>{
+    const s=document.createElement('div'); s.className='mini-slide';
+    s.innerHTML=`<img src="${src}" alt="이미지 ${i+1}">`; slidesEl.appendChild(s);
+    const d=document.createElement('div'); d.className='mini-dot';
+    d.addEventListener('click',()=>goTo(slider,i)); dotsEl.appendChild(d);
+  });
+
+  card.querySelector('.mini-prev').addEventListener('click', ()=>goStep(slider,-1));
+  card.querySelector('.mini-next').addEventListener('click', ()=>goStep(slider,+1));
+
+  // touch swipe
+  let startX=null;
+  slidesEl.addEventListener('touchstart', e=>{ startX=e.touches[0].clientX; }, {passive:true});
+  slidesEl.addEventListener('touchend', e=>{
+    if(startX==null) return;
+    const dx=e.changedTouches[0].clientX-startX;
+    if(Math.abs(dx)>40) dx<0?goStep(slider,+1):goStep(slider,-1);
+    startX=null;
+  }, {passive:true});
+
+  setIndex(slider,0);
+}
+function setIndex(slider,i){
+  const slidesEl=slider.querySelector('.mini-slides');
+  const total=slidesEl.children.length;
+  const idx=Math.max(0,Math.min(total-1,i));
+  slider.dataset.index=String(idx);
+  slidesEl.style.transform=`translateX(${-idx*100}%)`;
+
+  const dots=slider.parentElement.querySelectorAll('.mini-dot');
+  dots.forEach((d,k)=>d.classList.toggle('active',k===idx));
+
+  if(idx>=1 && total>1) slider.classList.add('show-nav');
+  else slider.classList.remove('show-nav');
+
+  slider.querySelector('.mini-prev').disabled=(idx===0);
+  slider.querySelector('.mini-next').disabled=(idx===total-1);
+}
+const goTo=(slider,i)=>setIndex(slider,i);
+const goStep=(slider,step)=>setIndex(slider,(+slider.dataset.index||0)+step);
+
+/* ========================= */
+function placeholder(){
+  return "data:image/svg+xml;utf8,"+encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' width='560' height='700'>
+      <rect width='100%' height='100%' rx='12' fill='#dddddd'/>
+      <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#333' font-size='28'>280×350</text>
+    </svg>`
+  );
+}
+
+/* 초기 로드 */
+loadNextPage();
+</script>
+</body>
+</html>

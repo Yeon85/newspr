@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>뉴스&홍보 – 카드 내 슬라이더</title>
+<style>
+  :root{ --bg:#f5f6f8; --card:#fff; --ink:#222; --ink2:#666; --line:#e9e9ee; --brand:#0b5bd3; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", Arial, sans-serif;color:var(--ink)}
+  header{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);z-index:10}
+  .bar{max-width:420px;margin:0 auto;display:flex;align-items:center;gap:8px;padding:10px 12px}
+  .bar .title{font-weight:700}
+  .wrap{max-width:420px;margin:0 auto;padding:10px 12px 24px}
+
+  .uploader{display:flex;gap:8px;align-items:center;margin:4px 0 12px}
+  .uploader input{display:none}
+  .btn{padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer}
+  .hint{font-size:12px;color:var(--ink2)}
+
+  .list{display:flex;flex-direction:column;gap:18px}
+  .card{background:var(--card);border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.06);padding:12px}
+  /* 카드 내 슬라이더 */
+  .mini-slider{position:relative;border-radius:10px;overflow:hidden;background:#ddd}
+  .mini-slides{display:flex;transition:transform .35s ease}
+  .mini-slide{min-width:100%}
+  .mini-slide img{display:block;width:100%;aspect-ratio:4/5;object-fit:cover}
+  /* 도트: 사진 하단에 오버레이 */
+  .mini-dots{position:absolute;left:0;right:0;bottom:8px;display:flex;gap:6px;justify-content:center}
+  .mini-dot{width:8px;height:8px;border-radius:50%;background:#cfd3da;box-shadow:0 0 0 1px rgba(0,0,0,.1) inset;opacity:.95;cursor:pointer}
+  .mini-dot.active{background:var(--brand)}
+  /* 좌우 버튼(선택) */
+  .mini-nav{position:absolute;top:50%;left:0;right:0;display:flex;justify-content:space-between;transform:translateY(-50%);pointer-events:none}
+  .mini-nav button{pointer-events:auto;border:none;background:rgba(0,0,0,.35);color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer}
+
+
+/* 본문: 처음에는 1줄만 */
+  .caption{
+    margin-top:2px; font-size:14px; line-height:1.55; color:#222;
+    display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:1;
+    overflow:hidden;
+  }
+  .caption.expanded{
+    -webkit-line-clamp:unset; display:block;
+  }
+  .more-btn{
+    display:inline-flex; gap:4px; align-items:center;
+    margin-top:6px; padding:4px 10px;
+    border:1px solid var(--line); border-radius:999px;
+    background:#fff; font-size:12px; color:#333; cursor:pointer;
+  }
+  .more-btn[hidden]{display:none !important}
+  
+  
+</style>
+</head>
+<body>
+  <header>
+    <div class="bar">
+      <div class="title">뉴스&홍보</div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="uploader">
+      <label class="btn" for="files">📷 사진 선택(여러 장)</label>
+      <input id="files" type="file" accept="image/*" multiple>
+      <div class="hint">각 카드 사진에 도트+슬라이더 적용</div>
+    </div>
+
+    <section class="list" id="list">
+      <!-- JS가 카드 + 미니슬라이더를 만듭니다 -->
+    </section>
+  </main>
+
+<script>
+  // 샘플 텍스트
+  const texts = [
+    '빗썸 리서치 “연말장세, 기관이 좌우… 비트코인 ETF 자금이 변수”',
+    '물가불안과 고금리 속, 주택담보대출 금리 변동성 확대… 해설 20자',
+    '신제품 출시 기념 프로모션 안내 – 지금 신청하세요',
+  ];
+
+  let images = []; // {url, name}
+
+  const listEl = document.getElementById('list');
+  const fileInput = document.getElementById('files');
+
+  // 파일 업로드 → images 추가 → 리렌더
+  fileInput.addEventListener('change', e=>{
+    const files = [...e.target.files].filter(f=>f.type.startsWith('image/'));
+    for(const f of files){
+      const url = URL.createObjectURL(f);
+      images.push({url, name:f.name});
+    }
+    render();
+  });
+
+  function render(){
+    // 이미지가 하나도 없으면 placeholder 1장 추가
+    const srcs = images.length ? images.map(i=>i.url) : [placeholder()];
+
+    listEl.innerHTML = '';
+    texts.forEach((txt, i)=>{
+      const card = document.createElement('article');
+      card.className = 'card';
+      // 카드 내 미니 슬라이더 DOM
+      card.innerHTML = `
+        <div class="mini-slider" data-index="0">
+          <div class="mini-slides"></div>
+          <div class="mini-nav">
+            <button class="mini-prev" aria-label="이전">‹</button>
+            <button class="mini-next" aria-label="다음">›</button>
+          </div>
+          <div class="mini-dots"></div>
+        </div>
+        <div class="caption"></div>
+      `;
+      card.querySelector('.caption').textContent = txt;
+
+      // 이 카드에 슬라이드/도트 바인딩 (모든 업로드 이미지를 공유)
+      buildMiniSlider(card.querySelector('.mini-slider'), srcs);
+      listEl.appendChild(card);
+    });
+  }
+
+  function buildMiniSlider(root, srcs){
+    const slidesEl = root.querySelector('.mini-slides');
+    const dotsEl   = root.querySelector('.mini-dots');
+    slidesEl.innerHTML = '';
+    dotsEl.innerHTML   = '';
+
+    srcs.forEach((src, i)=>{
+      const s = document.createElement('div');
+      s.className = 'mini-slide';
+      s.innerHTML = `<img src="${src}" alt="이미지 ${i+1}">`;
+      slidesEl.appendChild(s);
+
+      const d = document.createElement('div');
+      d.className = 'mini-dot';
+      d.addEventListener('click', ()=> goTo(root, i));
+      dotsEl.appendChild(d);
+    });
+
+    root.querySelector('.mini-prev').addEventListener('click', ()=> goStep(root, -1));
+    root.querySelector('.mini-next').addEventListener('click', ()=> goStep(root, +1));
+
+    // 스와이프
+    let startX=null;
+    slidesEl.addEventListener('touchstart', e=>{ startX = e.touches[0].clientX; }, {passive:true});
+    slidesEl.addEventListener('touchend', e=>{
+      if(startX==null) return;
+      const dx = e.changedTouches[0].clientX - startX;
+      if(Math.abs(dx)>40) dx<0 ? goStep(root,+1) : goStep(root,-1);
+      startX=null;
+    }, {passive:true});
+
+    // 초기 상태
+    setIndex(root, 0);
+  }
+
+  function setIndex(root, i){
+    const total = root.querySelector('.mini-slides').children.length;
+    const idx = Math.max(0, Math.min(total-1, i));
+    root.dataset.index = String(idx);
+    root.querySelector('.mini-slides').style.transform = `translateX(${-idx*100}%)`;
+    [...root.querySelectorAll('.mini-dot')].forEach((d,k)=> d.classList.toggle('active', k===idx));
+    root.querySelector('.mini-prev').disabled = (idx===0);
+    root.querySelector('.mini-next').disabled = (idx===total-1);
+  }
+  const goTo = (root, i)=> setIndex(root, i);
+  const goStep = (root, step)=> setIndex(root, (+root.dataset.index||0)+step);
+
+  function placeholder(){
+    // SVG placeholder 데이터 URL
+    return "data:image/svg+xml;utf8," + encodeURIComponent(
+      `<svg xmlns='http://www.w3.org/2000/svg' width='560' height='700'>
+        <rect width='100%' height='100%' rx='12' fill='#dddddd'/>
+        <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#333' font-size='28'>280×350</text>
+      </svg>`
+    );
+  }
+
+  // 초기 렌더
+  render();
+</script>
+</body>
+</html>

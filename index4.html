@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>뉴스&홍보 – 카드 슬라이더 + 본문 더보기</title>
+<style>
+  :root{ --bg:#f5f6f8; --card:#fff; --ink:#222; --ink2:#666; --line:#e9e9ee; --brand:#0b5bd3; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans KR",Arial,sans-serif;color:var(--ink)}
+  .wrap{max-width:420px;margin:0 auto;padding:16px 12px 40px}
+  .uploader{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+  .uploader input{display:none}
+  .btn{padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer}
+  .hint{font-size:12px;color:var(--ink2)}
+
+  .list{display:flex;flex-direction:column;gap:18px}
+  .card{background:var(--card);border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.06);padding:12px}
+
+  /* 카드 내 슬라이더 */
+  .mini-slider{position:relative;border-radius:12px;overflow:hidden;background:#ddd}
+  .mini-slides{display:flex;transition:transform .35s ease}
+  .mini-slide{min-width:100%}
+  .mini-slide img{display:block;width:100%;aspect-ratio:4/5;object-fit:cover}
+
+  /* 사진 안 내비: 두 번째 장부터 */
+  .mini-nav{position:absolute;top:50%;left:0;right:0;display:flex;justify-content:space-between;transform:translateY(-50%);pointer-events:none;opacity:0;transition:opacity .2s}
+  .mini-nav button{pointer-events:auto;border:none;background:rgba(0,0,0,.35);color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer}
+  .mini-slider.show-nav .mini-nav{opacity:1}
+
+  /* 도트는 사진 아래 */
+  .mini-dots{display:flex;gap:8px;justify-content:center;align-items:center;padding:10px 0 6px}
+  .mini-dot{width:8px;height:8px;border-radius:50%;background:#cfd3da;cursor:pointer}
+  .mini-dot.active{background:var(--brand)}
+
+  /* 본문(줄임 + 더보기) */
+  .caption-wrap{position:relative}
+  .caption{
+    margin-top:2px; font-size:14px; line-height:1.55; color:#222;
+    display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3;
+    overflow:hidden;
+    /* 마지막 줄 흐림 페이드 */
+    --fade-h: 2.5rem;
+    mask-image: linear-gradient(#000 70%, rgba(0,0,0,.1));
+  }
+  .caption.expanded{
+    -webkit-line-clamp:unset; display:block; mask-image:none;
+  }
+  .more-btn{
+    display:inline-flex; gap:4px; align-items:center;
+    margin-top:6px; padding:4px 10px;
+    border:1px solid var(--line); border-radius:999px;
+    background:#fff; font-size:12px; color:#333; cursor:pointer;
+  }
+  .more-btn[hidden]{display:none !important}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="uploader">
+    <label class="btn" for="files">📷 사진 선택(여러 장)</label>
+    <input id="files" type="file" accept="image/*" multiple>
+    <div class="hint">도트는 사진 아래, ‹ ›는 두 번째 장부터, 본문은 탭하면 전체 보기</div>
+  </div>
+
+  <section id="list" class="list"></section>
+</main>
+
+<script>
+  /* 샘플 데이터 */
+  const texts = [
+    '카드뉴스에 관한 내용을 보게 하는 곳. 집주인이 채무를 완전히 상환하지 않은 상태에서 채무를 완전히 상환하지 않은 상태에서 집주인이 채무를 완전히 상환하지 않은 상태에서…',
+    '깡세거래 위험합니다. 집주인이 채무를 완전히 상환하지 않은 상태에서… 더 긴 본문이 계속 이어집니다. 더 긴 본문이 계속 이어집니다.'
+  ];
+  let images = []; // {url,name}
+
+  const listEl = document.getElementById('list');
+  const fileInput = document.getElementById('files');
+
+  fileInput.addEventListener('change', e=>{
+    const files = [...e.target.files].filter(f=>f.type.startsWith('image/'));
+    for(const f of files){ images.push({url:URL.createObjectURL(f), name:f.name}); }
+    render();
+  });
+
+  function render(){
+    const srcs = images.length ? images.map(i=>i.url) : [placeholder()];
+    listEl.innerHTML = '';
+    texts.forEach(txt=>{
+      const card = document.createElement('article');
+      card.className = 'card';
+      card.innerHTML = `
+        <div class="mini-slider" data-index="0">
+          <div class="mini-slides"></div>
+          <div class="mini-nav">
+            <button class="mini-prev" aria-label="이전">‹</button>
+            <button class="mini-next" aria-label="다음">›</button>
+          </div>
+        </div>
+        <div class="mini-dots"></div>
+
+        <div class="caption-wrap">
+          <div class="caption" tabindex="0" role="button" aria-expanded="false"></div>
+          <button class="more-btn" type="button">… 더보기</button>
+        </div>
+      `;
+      card.querySelector('.caption').textContent = txt;
+      buildMiniSlider(card, srcs);
+      makeExpandable(card);     // ← 줄임/전체보기 적용
+      listEl.appendChild(card);
+    });
+  }
+
+  /* --- 캡션 더보기/접기 --- */
+  function makeExpandable(card){
+    const cap = card.querySelector('.caption');
+    const btn = card.querySelector('.more-btn');
+
+    // 잘림 여부 판별(렌더 직후 한 프레임 뒤에 검사)
+    requestAnimationFrame(()=>{
+      const isClamped = cap.scrollHeight > cap.clientHeight + 1;
+      btn.hidden = !isClamped;             // 잘리지 않으면 버튼 숨김
+      // 캡션 전체 영역 클릭으로도 토글
+      const toggle = ()=>{
+        const expanded = cap.classList.toggle('expanded');
+        cap.setAttribute('aria-expanded', expanded);
+        btn.textContent = expanded ? '접기' : '… 더보기';
+      };
+      btn.addEventListener('click', toggle);
+      cap.addEventListener('click', toggle);
+      cap.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' ') { e.preventDefault(); toggle(); }});
+    });
+  }
+
+  /* --- 슬라이더 --- */
+  function buildMiniSlider(card, srcs){
+    const slider = card.querySelector('.mini-slider');
+    const slidesEl = card.querySelector('.mini-slides');
+    const dotsEl = card.querySelector('.mini-dots');
+
+    slidesEl.innerHTML = '';
+    dotsEl.innerHTML = '';
+
+    srcs.forEach((src, i)=>{
+      const s = document.createElement('div');
+      s.className = 'mini-slide';
+      s.innerHTML = `<img src="${src}" alt="이미지 ${i+1}">`;
+      slidesEl.appendChild(s);
+
+      const d = document.createElement('div');
+      d.className = 'mini-dot';
+      d.addEventListener('click', ()=> goTo(slider, i));
+      dotsEl.appendChild(d);
+    });
+
+    card.querySelector('.mini-prev').addEventListener('click', ()=> goStep(slider, -1));
+    card.querySelector('.mini-next').addEventListener('click', ()=> goStep(slider, +1));
+
+    // 스와이프
+    let startX=null;
+    slidesEl.addEventListener('touchstart', e=>{ startX = e.touches[0].clientX; }, {passive:true});
+    slidesEl.addEventListener('touchend', e=>{
+      if(startX==null) return;
+      const dx = e.changedTouches[0].clientX - startX;
+      if(Math.abs(dx)>40) dx<0 ? goStep(slider, +1) : goStep(slider, -1);
+      startX=null;
+    }, {passive:true});
+
+    setIndex(slider, 0);
+  }
+
+  function setIndex(slider, i){
+    const slidesEl = slider.querySelector('.mini-slides');
+    const total = slidesEl.children.length;
+    const idx = Math.max(0, Math.min(total-1, i));
+    slider.dataset.index = String(idx);
+    slidesEl.style.transform = `translateX(${-idx*100}%)`;
+
+    const dots = slider.parentElement.querySelectorAll('.mini-dot');
+    dots.forEach((d,k)=> d.classList.toggle('active', k===idx));
+
+    // 두 번째 장부터 ‹ › 표시
+    if (idx >= 1 && total > 1) slider.classList.add('show-nav');
+    else slider.classList.remove('show-nav');
+
+    slider.querySelector('.mini-prev').disabled = (idx===0);
+    slider.querySelector('.mini-next').disabled = (idx===total-1);
+  }
+  const goTo = (slider, i)=> setIndex(slider, i);
+  const goStep = (slider, step)=> setIndex(slider, (+slider.dataset.index||0)+step);
+
+  function placeholder(){
+    return "data:image/svg+xml;utf8," + encodeURIComponent(
+      `<svg xmlns='http://www.w3.org/2000/svg' width='560' height='700'>
+        <rect width='100%' height='100%' rx='12' fill='#dddddd'/>
+        <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#333' font-size='28'>280×350</text>
+      </svg>`
+    );
+  }
+
+  render();
+</script>
+</body>
+</html>

@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>뉴스&홍보 – 무한 스크롤 + 가상 스크롤 + 카드 슬라이더</title>
+<style>
+  :root{ --bg:#f5f6f8; --card:#fff; --ink:#222; --ink2:#666; --line:#e9e9ee; --brand:#0b5bd3; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans KR",Arial,sans-serif;color:var(--ink)}
+  header{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);z-index:10}
+  .bar{max-width:480px;margin:0 auto;display:flex;align-items:center;gap:8px;padding:10px 12px}
+  .title{font-weight:700}
+  .wrap{max-width:480px;margin:0 auto;padding:8px 12px 40px}
+
+  /* 리스트 컨테이너 (가상 스크롤용 spacer 포함) */
+  #topSpacer,#bottomSpacer{height:0}
+  .list{display:block}
+  .card{background:var(--card);border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.06);padding:12px;margin-bottom:14px}
+
+  /* 이미지 슬라이더 (카드 내) */
+  .mini-slider{position:relative;border-radius:12px;overflow:hidden;background:#ddd}
+  .mini-slides{display:flex;transition:transform .35s ease}
+  .mini-slide{min-width:100%}
+  .mini-slide img{
+    display:block;width:100%;aspect-ratio:4/5;object-fit:cover; /* ← 280×350 비율 유지 */
+    /* 고정 크기 원하면 아래 두 줄만 사용
+    width:280px;height:350px;margin:0 auto;object-fit:cover;
+    */
+  }
+
+  /* 사진 안 ‹› : 두 번째 장부터 보이게 */
+  .mini-nav{position:absolute;top:50%;left:0;right:0;display:flex;justify-content:space-between;transform:translateY(-50%);pointer-events:none;opacity:0;transition:opacity .2s}
+  .mini-nav button{pointer-events:auto;border:none;background:rgba(0,0,0,.35);color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer}
+  .mini-slider.show-nav .mini-nav{opacity:1}
+
+  /* 도트: 사진 아래 */
+  .mini-dots{display:flex;gap:8px;justify-content:center;align-items:center;padding:10px 0 6px}
+  .mini-dot{width:8px;height:8px;border-radius:50%;background:#cfd3da;cursor:pointer}
+  .mini-dot.active{background:var(--brand)}
+
+  /* 본문 (1줄 + 더보기) */
+  .caption{margin-top:2px;font-size:14px;line-height:1.55;color:#222;
+           display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden}
+  .caption.expanded{-webkit-line-clamp:unset;display:block}
+  .more-btn{display:inline-flex;gap:4px;align-items:center;margin-top:6px;padding:4px 10px;
+            border:1px solid var(--line);border-radius:999px;background:#fff;font-size:12px;color:#333;cursor:pointer}
+  .more-btn[hidden]{display:none!important}
+
+  .meta{display:flex;justify-content:flex-end;color:#666;font-size:12px;margin-top:6px}
+  .sentinel{height:24px}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="title">뉴스&홍보</div>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- 가상 스크롤용 상단 패딩 -->
+  <div id="topSpacer"></div>
+
+  <section id="list" class="list" aria-label="뉴스 목록"></section>
+
+  <!-- 가상 스크롤용 하단 패딩 -->
+  <div id="bottomSpacer"></div>
+
+  <!-- 무한 로드 트리거 -->
+  <div id="sentinel" class="sentinel" aria-hidden="true"></div>
+</main>
+
+<script>
+/* =======================
+   API 스펙 (권장)
+   GET /api/news?cursor=<opaque>&limit=<n>
+   -> { items: [{id, title, images:[url1,url2,...], date}], nextCursor: "..." | null }
+   ======================= */
+
+const PAGE_SIZE = 20;             // 페이지당 로드 개수
+const MAX_DOM_CARDS = 120;        // DOM에 유지할 최대 카드 수(넘으면 위에서 제거)
+const EST_CARD_HEIGHT = 470;      // 카드 평균 높이(비율 사진 + 도트 + 1줄 + 버튼)
+let nextCursor = null;            // 다음 페이지 커서
+let reachedEnd = false;           // 더 이상 데이터 없음
+let loading = false;
+
+// 가상 스크롤 상태
+let topRemovedCount = 0;          // 위에서 몇 장을 잘라냈는지
+let topSpacerPx = 0;              // 잘라낸 높이 누적
+
+// 요소
+const listEl = document.getElementById('list');
+const topSpacer = document.getElementById('topSpacer');
+const bottomSpacer = document.getElementById('bottomSpacer');
+const sentinel = document.getElementById('sentinel');
+
+/* ▼▼ 실제 서버 연동 함수로 교체하면 됨 */
+async function fetchPageFromServer(cursor, limit) {
+  // 여긴 데모 목업: 서버 없을 때 테스트용
+  // 실제로는: const res = await fetch(`/api/news?cursor=${encodeURIComponent(cursor||'')}&limit=${limit}`);
+  //           return res.json();
+  await new Promise(r => setTimeout(r, 300)); // 느린 네트워크 흉내
+  const start = cursor ? parseInt(cursor,10) : 0;
+  const end = start + limit;
+  const items = [];
+  for (let i = start; i < end; i++) {
+    // 더미 이미지 3장씩 (picsum seed)
+    items.push({
+      id: i,
+      title: `#${i} 카드뉴스에 관한 내용을 보게 하는 곳. 집주인이 채무를 완전히 상환하지 않은 상태에서 계속 이어지는 예시 문장입니다.`,
+      images: [
+        `https://picsum.photos/seed/${i}-1/560/700`,
+        `https://picsum.photos/seed/${i}-2/560/700`,
+        `https://picsum.photos/seed/${i}-3/560/700`,
+      ],
+      date: new Date(Date.now() - i*86400000).toISOString().slice(0,10)
+    });
+  }
+  const mockTotal = 10000; // 만개 가정
+  return {
+    items,
+    nextCursor: end >= mockTotal ? null : String(end)
+  };
+}
+/* ▲▲ 이 함수만 서버로 바꾸면 전체 동작 동일 */
+
+async function loadNextPage(){
+  if (loading || reachedEnd) return;
+  loading = true;
+  try{
+    const {items, nextCursor: nc} = await fetchPageFromServer(nextCursor, PAGE_SIZE);
+    nextCursor = nc;
+    if (!items || items.length === 0) {
+      reachedEnd = true;
+    } else {
+      appendCards(items);
+      if (!nc) reachedEnd = true;
+    }
+  } finally {
+    loading = false;
+  }
+}
+
+function appendCards(items){
+  for(const row of items){
+    const card = buildCard(row);
+    listEl.appendChild(card);
+  }
+  virtualTrimIfNeeded();
+}
+
+function buildCard(row){
+  const card = document.createElement('article');
+  card.className = 'card';
+  card.dataset.id = row.id;
+
+  // 이미지 없을 수도 있음 처리
+  const imgs = (row.images && row.images.length) ? row.images : [placeholder()];
+
+  card.innerHTML = `
+    <div class="mini-slider" data-index="0">
+      <div class="mini-slides"></div>
+      <div class="mini-nav">
+        <button class="mini-prev" aria-label="이전">‹</button>
+        <button class="mini-next" aria-label="다음">›</button>
+      </div>
+    </div>
+    <div class="mini-dots"></div>
+
+    <div>
+      <div class="caption" tabindex="0" role="button" aria-expanded="false"></div>
+      <button class="more-btn" type="button">… 더보기</button>
+    </div>
+
+    <div class="meta">${row.date}</div>
+  `;
+
+  // 텍스트
+  const cap = card.querySelector('.caption');
+  cap.textContent = row.title;
+
+  // 더보기
+  const btn = card.querySelector('.more-btn');
+  btn.addEventListener('click', ()=>{
+    const expanded = cap.classList.toggle('expanded');
+    cap.setAttribute('aria-expanded', expanded);
+    btn.textContent = expanded ? '접기' : '… 더보기';
+  });
+  cap.addEventListener('click', ()=>btn.click());
+  cap.addEventListener('keydown', (e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); btn.click(); } });
+
+  // 잘림 여부로 버튼 숨김 (렌더 후)
+  requestAnimationFrame(()=>{
+    btn.hidden = !(cap.scrollHeight > cap.clientHeight + 1);
+  });
+
+  // 슬라이더 바인딩
+  buildMiniSlider(card, imgs);
+  return card;
+}
+
+/* ------ 카드 내 슬라이더 ------ */
+function buildMiniSlider(card, srcs){
+  const slider = card.querySelector('.mini-slider');
+  const slidesEl = card.querySelector('.mini-slides');
+  const dotsEl = card.querySelector('.mini-dots');
+
+  slidesEl.innerHTML = '';
+  dotsEl.innerHTML = '';
+
+  srcs.forEach((src, i)=>{
+    const s = document.createElement('div');
+    s.className = 'mini-slide';
+    s.innerHTML = `<img src="${src}" alt="이미지 ${i+1}">`;
+    slidesEl.appendChild(s);
+
+    const d = document.createElement('div');
+    d.className = 'mini-dot';
+    d.addEventListener('click', ()=> goTo(slider, i));
+    dotsEl.appendChild(d);
+  });
+
+  card.querySelector('.mini-prev').addEventListener('click', ()=> goStep(slider, -1));
+  card.querySelector('.mini-next').addEventListener('click', ()=> goStep(slider, +1));
+
+  // 터치 스와이프
+  let startX=null;
+  slidesEl.addEventListener('touchstart', e=>{ startX = e.touches[0].clientX; }, {passive:true});
+  slidesEl.addEventListener('touchend', e=>{
+    if(startX==null) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    if(Math.abs(dx)>40) dx<0 ? goStep(slider, +1) : goStep(slider, -1);
+    startX=null;
+  }, {passive:true});
+
+  setIndex(slider, 0);
+}
+function setIndex(slider, i){
+  const slidesEl = slider.querySelector('.mini-slides');
+  const total = slidesEl.children.length;
+  const idx = Math.max(0, Math.min(total-1, i));
+  slider.dataset.index = String(idx);
+  slidesEl.style.transform = `translateX(${-idx*100}%)`;
+
+  const dots = slider.parentElement.querySelectorAll('.mini-dot');
+  dots.forEach((d,k)=> d.classList.toggle('active', k===idx));
+
+  // 두 번째 장부터 ‹ › 표시
+  if (idx >= 1 && total > 1) slider.classList.add('show-nav');
+  else slider.classList.remove('show-nav');
+
+  slider.querySelector('.mini-prev').disabled = (idx===0);
+  slider.querySelector('.mini-next').disabled = (idx===total-1);
+}
+const goTo = (slider, i)=> setIndex(slider, i);
+const goStep = (slider, step)=> setIndex(slider, (+slider.dataset.index||0)+step);
+
+/* ------ 가상 스크롤: DOM 트리밍 ------ */
+function virtualTrimIfNeeded(){
+  const cards = listEl.children.length;
+  if (cards <= MAX_DOM_CARDS) return;
+
+  // 윗부분에서 제거할 개수(대략 절반씩 쳐냄 → 부드럽게)
+  const removeCount = Math.min(cards - MAX_DOM_CARDS, Math.floor(MAX_DOM_CARDS/2));
+  let removedHeight = 0;
+
+  for (let i=0; i<removeCount; i++){
+    const first = listEl.firstElementChild;
+    if (!first) break;
+    removedHeight += first.getBoundingClientRect().height || EST_CARD_HEIGHT;
+    listEl.removeChild(first);
+    topRemovedCount++;
+  }
+  topSpacerPx += removedHeight;
+  topSpacer.style.height = topSpacerPx + 'px';
+
+  // 스크롤 위치가 튀지 않도록 현재 스크롤을 같은 만큼 앞으로 밀어줌
+  window.scrollBy(0, -removedHeight);
+}
+
+/* ------ 무한 스크롤 트리거 ------ */
+const io = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if (e.isIntersecting) loadNextPage();
+  });
+}, {root:null, rootMargin: '800px 0px 800px 0px', threshold: 0});
+io.observe(sentinel);
+
+/* ------ placeholder ------ */
+function placeholder(){
+  return "data:image/svg+xml;utf8," + encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' width='560' height='700'>
+      <rect width='100%' height='100%' rx='12' fill='#dddddd'/>
+      <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#333' font-size='28'>280×350</text>
+    </svg>`
+  );
+}
+
+/* 초기 로드 */
+loadNextPage();
+</script>
+</body>
+</html>

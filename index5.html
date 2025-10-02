@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>뉴스&홍보 – 카드 슬라이더 + 본문 1줄 더보기</title>
+<style>
+  :root{ --bg:#f5f6f8; --card:#fff; --ink:#222; --ink2:#666; --line:#e9e9ee; --brand:#0b5bd3; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans KR",Arial,sans-serif;color:var(--ink)}
+  .wrap{max-width:420px;margin:0 auto;padding:16px 12px 40px}
+
+  .list{display:flex;flex-direction:column;gap:18px}
+  .card{background:var(--card);border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.06);padding:12px}
+
+  /* 슬라이더 */
+  .mini-slider{position:relative;border-radius:12px;overflow:hidden;background:#ddd}
+  .mini-slides{display:flex;transition:transform .35s ease}
+  .mini-slide{min-width:100%}
+  .mini-slide img{display:block;width:100%;aspect-ratio:4/5;object-fit:cover}
+
+  .mini-nav{position:absolute;top:50%;left:0;right:0;display:flex;justify-content:space-between;transform:translateY(-50%);pointer-events:none;opacity:0;transition:opacity .2s}
+  .mini-nav button{pointer-events:auto;border:none;background:rgba(0,0,0,.35);color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer}
+  .mini-slider.show-nav .mini-nav{opacity:1}
+
+  .mini-dots{display:flex;gap:8px;justify-content:center;align-items:center;padding:10px 0 6px}
+  .mini-dot{width:8px;height:8px;border-radius:50%;background:#cfd3da;cursor:pointer}
+  .mini-dot.active{background:var(--brand)}
+
+  /* 본문: 처음에는 1줄만 */
+  .caption{
+    margin-top:2px; font-size:14px; line-height:1.55; color:#222;
+    display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:1;
+    overflow:hidden;
+  }
+  .caption.expanded{
+    -webkit-line-clamp:unset; display:block;
+  }
+  .more-btn{
+    display:inline-flex; gap:4px; align-items:center;
+    margin-top:6px; padding:4px 10px;
+    border:1px solid var(--line); border-radius:999px;
+    background:#fff; font-size:12px; color:#333; cursor:pointer;
+  }
+  .more-btn[hidden]{display:none !important}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section id="list" class="list"></section>
+</main>
+
+<script>
+  const texts = [
+    '카드뉴스에 관한 내용을 보게 하는 곳. 집주인이 채무를 완전히 상환하지 않은 상태에서 채무를 완전히 상환하지 않은 상태에서…',
+    '깡세거래 위험합니다. 집주인이 채무를 완전히 상환하지 않은 상태에서… 더 긴 본문이 계속 이어집니다.'
+  ];
+  let images = [];
+
+  const listEl = document.getElementById('list');
+
+  function render(){
+    const srcs = images.length ? images.map(i=>i.url) : [placeholder()];
+    listEl.innerHTML = '';
+    texts.forEach(txt=>{
+      const card = document.createElement('article');
+      card.className = 'card';
+      card.innerHTML = `
+        <div class="mini-slider" data-index="0">
+          <div class="mini-slides"></div>
+          <div class="mini-nav">
+            <button class="mini-prev" aria-label="이전">‹</button>
+            <button class="mini-next" aria-label="다음">›</button>
+          </div>
+        </div>
+        <div class="mini-dots"></div>
+        <div>
+          <div class="caption" tabindex="0" role="button" aria-expanded="false">${txt}</div>
+          <button class="more-btn" type="button">… 더보기</button>
+        </div>
+      `;
+      const cap = card.querySelector('.caption');
+      const btn = card.querySelector('.more-btn');
+      btn.addEventListener('click', ()=>{
+        const expanded = cap.classList.toggle('expanded');
+        cap.setAttribute('aria-expanded', expanded);
+        btn.textContent = expanded ? '접기' : '… 더보기';
+      });
+      listEl.appendChild(card);
+    });
+  }
+
+  function placeholder(){
+    return "data:image/svg+xml;utf8," + encodeURIComponent(
+      `<svg xmlns='http://www.w3.org/2000/svg' width='560' height='700'>
+        <rect width='100%' height='100%' rx='12' fill='#dddddd'/>
+        <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#333' font-size='28'>280×350</text>
+      </svg>`
+    );
+  }
+
+  render();
+</script>
+</body>
+</html>
