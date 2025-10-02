@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>뉴스&홍보 – 무한스크롤·슬라이더·보기</title>
+<title>뉴스 – 무한스크롤·슬라이더·보기</title>
 <style>
   :root{ --bg:#f5f6f8; --card:#fff; --ink:#222; --ink2:#666; --line:#e9e9ee; --brand:#0b5bd3; }
   *{box-sizing:border-box}
@@ -53,7 +53,7 @@
 
   .sentinel{height:24px}
 
-  /* ====== Fullscreen Viewer (Double-Click) ====== */
+  /* ====== Fullscreen Viewer ====== */
   .viewer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:999;}
   .viewer{position:fixed;inset:0;display:none;z-index:1000;overflow:auto}
   .viewer .sheet{max-width:520px;margin:20px auto;background:#fff;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.2);padding:14px}
@@ -90,7 +90,7 @@
   <header>
     <div class="bar">
       <div class="chip" aria-label="뒤로">←</div>
-      <div class="title">뉴스&홍보</div>
+      <div class="title" id="pageTitle">뉴스</div>
       <div class="bar-right">
         <div class="chip" aria-label="홈">🏠</div>
         <div class="chip" aria-label="메뉴">≡</div>
@@ -111,12 +111,12 @@
     <div id="sentinel" class="sentinel" aria-hidden="true"></div>
   </main>
 
-  <!-- ====== Double-Click Viewer ====== -->
+  <!-- ====== Viewer ====== -->
   <div id="viewer-backdrop" class="viewer-backdrop"></div>
   <div id="viewer" class="viewer" aria-modal="true" role="dialog" aria-hidden="true">
     <div class="sheet">
       <div class="viewer-header">
-        <div class="viewer-title">뉴스&홍보</div>
+        <div class="viewer-title" id="viewerTitle">뉴스</div>
         <button class="viewer-close" id="viewerCloseBtn" type="button">닫기</button>
       </div>
 
@@ -142,7 +142,7 @@
 
 <script>
 /* ================================
-   더미 데이터 생성용 긴 문장들
+   긴 더미 문장들 (랜덤 조합)
 ================================ */
 const DUMMY_SENTENCES = [
   "전세보증금 반환을 둘러싼 분쟁이 이어지면서 임차인의 정보 비대칭 해소가 시급하다는 지적이 나온다.",
@@ -179,7 +179,7 @@ function makeParagraph(min=4,max=10){
 }
 
 /* ================================
-   상태 관리
+   상태/요소
 ================================ */
 let currentType='news';
 const PAGE_SIZE=20, MAX_DOM_CARDS=120, EST_CARD_HEIGHT=470;
@@ -190,6 +190,24 @@ const listEl=document.getElementById('list');
 const topSpacer=document.getElementById('topSpacer');
 const sentinel=document.getElementById('sentinel');
 
+const pageTitleEl  = document.getElementById('pageTitle');
+const viewerTitleEl= document.getElementById('viewerTitle');
+
+/* 제목 동기화 */
+function setTitleByType(type){
+  const label = (type==='news')? '뉴스' : '홍보';
+  if(pageTitleEl)  pageTitleEl.textContent = label;
+  if(viewerTitleEl)viewerTitleEl.textContent = label;
+  document.title = `${label} – 무한스크롤·슬라이더·보기`;
+}
+function applyActiveTab(){
+  document.querySelectorAll('.tab').forEach(t=>{
+    const active = t.dataset.type === currentType;
+    t.classList.toggle('is-active', active);
+    t.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+}
+
 /* ================================
    Tabs
 ================================ */
@@ -199,6 +217,9 @@ document.querySelectorAll('.tab').forEach(tab=>{
     document.querySelectorAll('.tab').forEach(t=>{t.classList.remove('is-active');t.setAttribute('aria-selected','false');});
     tab.classList.add('is-active');tab.setAttribute('aria-selected','true');
     currentType=tab.dataset.type;
+
+    setTitleByType(currentType);
+    history.replaceState(null, '', `${location.pathname}?type=${currentType}`);
 
     nextCursor=null; reachedEnd=false; loading=false;
     topRemovedCount=0; topSpacerPx=0; topSpacer.style.height='0';
@@ -292,13 +313,14 @@ function buildCard(row){
 }
 
 /* ================================
-   Slider inside card
+   Slider inside card (모바일: 터치=열기)
 ================================ */
 function buildMiniSlider(card,srcs,meta){
   const slider=card.querySelector('.mini-slider');
   const slidesEl=card.querySelector('.mini-slides');
   const dotsEl=card.querySelector('.mini-dots');
   slidesEl.innerHTML=''; dotsEl.innerHTML='';
+
   srcs.forEach((src,i)=>{
     const s=document.createElement('div'); s.className='mini-slide';
     s.innerHTML=`<img src="${src}" alt="이미지 ${i+1}">`; slidesEl.appendChild(s);
@@ -309,19 +331,22 @@ function buildMiniSlider(card,srcs,meta){
   card.querySelector('.mini-next').addEventListener('click',()=>goStep(slider,+1));
 
   // 스와이프
-  let startX=null;
-  slidesEl.addEventListener('touchstart', e=>{ startX=e.touches[0].clientX; }, {passive:true});
+  let startX=null, swiped=false;
+  slidesEl.addEventListener('touchstart', e=>{ startX=e.touches[0].clientX; swiped=false; }, {passive:true});
   slidesEl.addEventListener('touchend', e=>{
-    if(startX==null)return;
+    if(startX==null) return;
     const dx=e.changedTouches[0].clientX-startX;
-    if(Math.abs(dx)>40) dx<0?goStep(slider,+1):goStep(slider,-1);
+    if(Math.abs(dx)>40){ swiped=true; dx<0?goStep(slider,+1):goStep(slider,-1); }
     startX=null;
   }, {passive:true});
 
-  // 더블클릭 → 확대 뷰어
-  slidesEl.addEventListener('dblclick', ()=>{
+  // 모바일/데스크톱: 한 번 터치/클릭 → 뷰어 열기 (스와이프 직후는 무시)
+  slidesEl.addEventListener('click', ()=>{
+    if(swiped) { swiped=false; return; }
     openViewer(srcs, meta?.title || '', meta?.date || '');
   });
+  // (원하면 데스크톱 더블클릭도 지원 가능)
+  // slidesEl.addEventListener('dblclick', ()=> openViewer(srcs, meta?.title || '', meta?.date || ''));
 
   setIndex(slider,0);
 }
@@ -341,7 +366,7 @@ const goTo=(slider,i)=>setIndex(slider,i);
 const goStep=(slider,step)=>setIndex(slider,(+slider.dataset.index||0)+step);
 
 /* ================================
-   Viewer (fullscreen) + 공유/재생/핀치줌/마우스 드래그
+   Viewer (한 번 터치로 닫힘 + 공유/재생/핀치줌)
 ================================ */
 const viewer      = document.getElementById('viewer');
 const backdrop    = document.getElementById('viewer-backdrop');
@@ -362,17 +387,17 @@ let autoplayTimer = null;
 const AUTOPLAY_MS = 3000;
 let isAutoplaying = false;
 
-/* Zoom state (current slide img) */
+/* Zoom state */
 let zScale = 1, zTx = 0, zTy = 0;
 const Z_MIN = 1, Z_MAX = 4;
 let pinchStartDist = 0, pinchStartScale = 1;
 let panStartX = 0, panStartY = 0, panStartTx = 0, panStartTy = 0;
 let isPanning = false, isPinching = false;
+/* 터치 직후 합성 클릭으로 닫힘 방지 */
+let suppressTapClose = false;
+function blockTapCloseBrief(){ suppressTapClose = true; setTimeout(()=>{ suppressTapClose = false; }, 250); }
 
-function viewerImgEl(){
-  const slide = vSlidesEl.children[vIdx];
-  return slide ? slide.querySelector('img') : null;
-}
+function viewerImgEl(){ const slide = vSlidesEl.children[vIdx]; return slide ? slide.querySelector('img') : null; }
 function resetZoom(){
   zScale = 1; zTx = 0; zTy = 0;
   const img = viewerImgEl(); if(!img) return;
@@ -405,7 +430,7 @@ function openViewer(imgs, caption, date){
 
     const d = document.createElement('div');
     d.className = 'viewer-dot';
-    d.addEventListener('click', ()=> viewerGoTo(i));
+    d.addEventListener('click', (e)=>{ e.stopPropagation(); viewerGoTo(i); });
     vDotsEl.appendChild(d);
   });
 
@@ -483,14 +508,27 @@ async function shareCurrent(){
   }catch(e){ /* 사용자가 취소 */ }
 }
 
-/* Events: nav/close/list/share/play */
+/* ---- 터치 한 번으로 닫기 ----
+   - viewer(배경/시트 포함) 어디나 탭 → 닫힘
+   - 단, 버튼/내비게이션 클릭은 e.stopPropagation()으로 예외 처리
+   - 핀치/팬 직후 합성 클릭은 suppressTapClose 플래그로 무시
+*/
+viewer.addEventListener('click', ()=>{ if(!suppressTapClose) closeViewer(); });
+backdrop.addEventListener('click', closeViewer);
+
+/* 컨트롤들은 닫힘 방지 */
+[vPrevBtn, vNextBtn, vCloseBtn, vListBtn, vShareBtn, vPlayBtn].forEach(btn=>{
+  btn.addEventListener('click', (e)=>{ e.stopPropagation(); });
+});
+vDotsEl.addEventListener('click', (e)=>{ e.stopPropagation(); });
+
+/* 컨트롤 동작 */
 vPrevBtn.addEventListener('click', ()=> viewerStep(-1));
 vNextBtn.addEventListener('click', ()=> viewerStep(+1));
 vCloseBtn.addEventListener('click', closeViewer);
-vListBtn.addEventListener('click', closeViewer);
+vListBtn .addEventListener('click', closeViewer);
 vShareBtn.addEventListener('click', shareCurrent);
-vPlayBtn.addEventListener('click', ()=>{ isAutoplaying ? stopAutoplay() : startAutoplay(); });
-backdrop.addEventListener('click', closeViewer);
+vPlayBtn .addEventListener('click', ()=>{ isAutoplaying ? stopAutoplay() : startAutoplay(); });
 
 /* Viewer swipe for slide change (zScale===1일 때만) */
 let vStartX=null;
@@ -502,6 +540,7 @@ vSlidesEl.addEventListener('touchend', e=>{
   const dx=e.changedTouches[0].clientX-vStartX;
   if(Math.abs(dx)>40) dx<0 ? viewerStep(+1) : viewerStep(-1);
   vStartX=null;
+  blockTapCloseBrief(); // 스와이프 직후 합성 탭으로 닫히지 않게
 }, {passive:true});
 
 /* Pinch Zoom + Pan (터치) */
@@ -546,6 +585,7 @@ vSlidesEl.addEventListener('touchend', ()=>{
   if (isPinching || isPanning){
     isPinching = false; isPanning = false;
     vSliderBox.classList.remove('is-panning');
+    blockTapCloseBrief(); // 확대/이동 직후 탭 닫힘 방지
   }
 });
 
@@ -591,8 +631,14 @@ function placeholder(){
   );
 }
 
-/* 초기 로드 */
-loadNextPage();
+/* 초기 로드: URL ?type=... 처리 + 제목/탭 동기화 */
+{
+  const urlType = new URLSearchParams(location.search).get('type');
+  if (urlType === 'news' || urlType === 'pr') currentType = urlType;
+  applyActiveTab();
+  setTitleByType(currentType);
+  loadNextPage();
+}
 </script>
 </body>
 </html>
