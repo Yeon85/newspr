@@ -345,8 +345,6 @@ function buildMiniSlider(card,srcs,meta){
     if(swiped) { swiped=false; return; }
     openViewer(srcs, meta?.title || '', meta?.date || '');
   });
-  // (원하면 데스크톱 더블클릭도 지원 가능)
-  // slidesEl.addEventListener('dblclick', ()=> openViewer(srcs, meta?.title || '', meta?.date || ''));
 
   setIndex(slider,0);
 }
@@ -366,7 +364,7 @@ const goTo=(slider,i)=>setIndex(slider,i);
 const goStep=(slider,step)=>setIndex(slider,(+slider.dataset.index||0)+step);
 
 /* ================================
-   Viewer (한 번 터치로 닫힘 + 공유/재생/핀치줌)
+   Viewer (사진 탭 시에만 닫힘) + 공유/재생/핀치줌
 ================================ */
 const viewer      = document.getElementById('viewer');
 const backdrop    = document.getElementById('viewer-backdrop');
@@ -508,19 +506,23 @@ async function shareCurrent(){
   }catch(e){ /* 사용자가 취소 */ }
 }
 
-/* ---- 터치 한 번으로 닫기 ----
-   - viewer(배경/시트 포함) 어디나 탭 → 닫힘
-   - 단, 버튼/내비게이션 클릭은 e.stopPropagation()으로 예외 처리
-   - 핀치/팬 직후 합성 클릭은 suppressTapClose 플래그로 무시
-*/
-viewer.addEventListener('click', ()=>{ if(!suppressTapClose) closeViewer(); });
-backdrop.addEventListener('click', closeViewer);
+/* ---- 사진(이미지) 클릭 시에만 닫힘 ---- */
+/* 배경/시트 탭으로는 닫히지 않음 */
+backdrop.addEventListener('click', (e)=>{ e.stopPropagation(); }); // 무시
+viewer.addEventListener('click', (e)=>{ e.stopPropagation(); });   // 무시
+
+/* 이미지 클릭으로만 닫기 (스와이프/핀치 직후 합성 탭은 무시) */
+vSlidesEl.addEventListener('click', (e)=>{
+  const isImgClick = e.target && e.target.tagName === 'IMG';
+  if (!isImgClick) return;
+  if (suppressTapClose) return;
+  closeViewer();
+});
 
 /* 컨트롤들은 닫힘 방지 */
 [vPrevBtn, vNextBtn, vCloseBtn, vListBtn, vShareBtn, vPlayBtn].forEach(btn=>{
   btn.addEventListener('click', (e)=>{ e.stopPropagation(); });
 });
-vDotsEl.addEventListener('click', (e)=>{ e.stopPropagation(); });
 
 /* 컨트롤 동작 */
 vPrevBtn.addEventListener('click', ()=> viewerStep(-1));
