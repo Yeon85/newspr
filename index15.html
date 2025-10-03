@@ -32,7 +32,6 @@
   .mini-slider{
     position:relative;border-radius:12px;overflow:hidden;background:#ddd;
     overscroll-behavior:contain; touch-action:pan-y;
-    aspect-ratio:4/5; /* 높이 선점으로 레이아웃 점프 방지 */
   }
   .mini-slides{display:flex;transition:transform .35s ease}
   .mini-slide{min-width:100%}
@@ -41,14 +40,6 @@
     cursor:pointer; -webkit-user-drag:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   }
   .mini-slider, .mini-slides, .mini-slide img{ overscroll-behavior:contain; touch-action:pan-y; }
-
-  /* 이미지 스켈레톤 */
-  .img-skeleton{
-    background:linear-gradient(100deg,#ddd 8%,#ececec 18%,#ddd 33%);
-    background-size:400% 100%;
-    animation:shimmer 1.2s ease-in-out infinite;
-  }
-  @keyframes shimmer{ 0%{background-position:100% 0} 100%{background-position:0 0} }
 
   /* ‹ › : 두 번째 장부터 보이기 */
   .mini-nav{position:absolute;top:50%;left:0;right:0;display:flex;justify-content:space-between;transform:translateY(-50%);pointer-events:none;opacity:0;transition:opacity .2s}
@@ -76,7 +67,7 @@
   .viewer-title{font-weight:700}
   .viewer-close{border:1px solid var(--line);background:#fff;border-radius:10px;padding:6px 10px;cursor:pointer}
 
-  .viewer-slider{position:relative;border-radius:12px;overflow:hidden;background:#ddd;touch-action:pan-y;overscroll-behavior:contain;aspect-ratio:4/5;}
+  .viewer-slider{position:relative;border-radius:12px;overflow:hidden;background:#ddd;touch-action:pan-y;overscroll-behavior:contain}
   .viewer-slides{display:flex;transition:transform .35s ease}
   .viewer-slide{min-width:100%}
   .viewer-slide img{
@@ -98,26 +89,6 @@
 
   #viewerSlider.is-zoomed  .viewer-slide img { cursor: grab; }
   #viewerSlider.is-zoomed.is-panning .viewer-slide img { cursor: grabbing; }
-
-  /* === 안드로이드용 로딩 오버레이(뷰어) === */
-  .viewer-loading{
-    position:absolute; inset:0; display:none; align-items:center; justify-content:center; gap:12px;
-    background:rgba(255,255,255,.6); backdrop-filter:saturate(180%) blur(2px); z-index:5;
-    font-size:14px; color:#333; flex-direction:column;
-  }
-  .viewer-loading.show{ display:flex; }
-  .spinner{
-    width:28px; height:28px; border-radius:50%;
-    border:3px solid #cfd3da; border-top-color:var(--brand);
-    animation:spin 0.9s linear infinite;
-  }
-  @keyframes spin{ to{ transform:rotate(360deg);} }
-
-  /* 메인 클릭 피드백(아주 짧은 잉크 효과 느낌) */
-  .mini-press{
-    position:absolute; inset:0; background:rgba(0,0,0,.06); pointer-events:none; opacity:0; transition:opacity .25s;
-  }
-  .mini-press.show{ opacity:1; }
 </style>
 </head>
 <body>
@@ -155,12 +126,6 @@
       </div>
 
       <div class="viewer-slider" data-index="0" id="viewerSlider">
-        <!-- Android 전용 로딩 레이어 -->
-        <div class="viewer-loading" id="viewerLoading" aria-hidden="true">
-          <div class="spinner"></div>
-          <div class="tip">이미지 불러오는 중…</div>
-        </div>
-
         <div class="viewer-slides" id="viewerSlides"></div>
         <div class="viewer-nav">
           <button id="viewerPrev">‹</button>
@@ -181,9 +146,6 @@
   </div>
 
 <script>
-/* ===== UA 체크: Android 여부 ===== */
-const isAndroid = /Android/i.test(navigator.userAgent);
-
 /* ===== 포인터 감지 + 중복오픈 가드 ===== */
 const USE_POINTER = !!window.PointerEvent;   // PC 마우스도 포함
 let _lastOpenAt = 0; // openViewer 중복 호출 방지
@@ -361,7 +323,6 @@ function buildCard(row){
   const imgs=row.images?.length?row.images:[placeholder()];
   card.innerHTML=`
     <div class="mini-slider" data-index="0">
-      <div class="mini-press"></div>
       <div class="mini-slides"></div>
       <div class="mini-nav">
         <button class="mini-prev" aria-label="이전">‹</button>
@@ -386,23 +347,15 @@ function buildCard(row){
 /* ===== 메인 슬라이더 (컨테이너 바인딩 + 클릭 어디든 열기) ===== */
 function buildMiniSlider(card,srcs,meta){
   const slider=card.querySelector('.mini-slider');
-  const press =card.querySelector('.mini-press');
   const slidesEl=card.querySelector('.mini-slides');
   const dotsEl=card.querySelector('.mini-dots');
   slidesEl.innerHTML=''; dotsEl.innerHTML='';
 
-  // 이미지 & 점 생성 (스켈레톤)
+  // 이미지 & 점 생성
   srcs.forEach((src,i)=>{
     const s=document.createElement('div'); s.className='mini-slide';
-    const img=new Image(); img.src=src; img.alt=`이미지 ${i+1}`;
-    img.setAttribute('draggable','false');
-    img.setAttribute('decoding','async');
-    if(i===0) img.setAttribute('fetchpriority','high');
-    img.classList.add('img-skeleton');
-    img.addEventListener('load', ()=> img.classList.remove('img-skeleton'), {once:true});
-    if(img.complete) img.classList.remove('img-skeleton');
+    const img=new Image(); img.src=src; img.alt=`이미지 ${i+1}`; img.setAttribute('draggable','false');
     s.appendChild(img); slidesEl.appendChild(s);
-
     const d=document.createElement('div'); d.className='mini-dot'; d.addEventListener('click',()=>goTo(slider,i)); dotsEl.appendChild(d);
   });
 
@@ -417,8 +370,6 @@ function buildMiniSlider(card,srcs,meta){
       onSwipeRight:()=>goStep(slider,-1),
       onTap:(e)=>{
         if (e.target.closest('button') || e.target.closest('.mini-dots')) return;
-        // Android: 탭 피드백
-        if(isAndroid){ press.classList.add('show'); setTimeout(()=>press.classList.remove('show'), 200); }
         openViewer(srcs, meta?.title||'', meta?.date||'');
       },
       lockThreshold: 10,
@@ -440,10 +391,7 @@ function buildMiniSlider(card,srcs,meta){
     slider.addEventListener('touchend', e=>{
       const dt=Date.now()-t0;
       if(lock==='h' && Math.abs(dx)>40){ dx<0?goStep(slider,+1):goStep(slider,-1); }
-      else if(dt<300 && Math.abs(dx)<8 && Math.abs(dy)<8){
-        if(isAndroid){ press.classList.add('show'); setTimeout(()=>press.classList.remove('show'), 200); }
-        openViewer(srcs, meta?.title||'', meta?.date||'');
-      }
+      else if(dt<300 && Math.abs(dx)<8 && Math.abs(dy)<8){ openViewer(srcs, meta?.title||'', meta?.date||''); }
       sx=sy=dx=dy=0; lock=null;
     }, {passive:true});
   }
@@ -451,7 +399,7 @@ function buildMiniSlider(card,srcs,meta){
   // 환경과 무관하게 ‘클릭’으로도 항상 열리게 (버튼/도트는 제외)
   slider.addEventListener('click', (e)=>{
     if (e.target.closest('button') || e.target.closest('.mini-dots')) return;
-    if(isAndroid){ press.classList.add('show'); setTimeout(()=>press.classList.remove('show'), 200); }
+    if (Date.now() - _lastOpenAt < 350) return; // onTap 직후 click 중복 방지
     openViewer(srcs, meta?.title || '', meta?.date || '');
   });
 
@@ -486,7 +434,6 @@ const vListBtn    = document.getElementById('viewerListBtn');
 const vShareBtn   = document.getElementById('viewerShareBtn');
 const vPlayBtn    = document.getElementById('viewerPlayBtn');
 const vSliderBox  = document.getElementById('viewerSlider');
-const vLoading    = document.getElementById('viewerLoading');
 
 let vIdx = 0;
 let autoplayTimer = null;
@@ -508,53 +455,17 @@ function resetZoom(){ zScale=1; zTx=0; zTy=0; const img=viewerImgEl(); if(img) i
 function applyZoom(){ const img=viewerImgEl(); if(!img) return; img.style.transform=`translate(${zTx}px,${zTy}px) scale(${zScale})`; if(zScale>1) vSliderBox.classList.add('is-zoomed'); else vSliderBox.classList.remove('is-zoomed','is-panning'); }
 function clampPan(){ const boxW=vSliderBox.clientWidth, boxH=vSliderBox.clientHeight; const maxX=(boxW*(zScale-1))/2, maxY=(boxH*(zScale-1))/2; zTx=Math.max(-maxX,Math.min(maxX,zTx)); zTy=Math.max(-maxY,Math.min(maxY,zTy)); }
 
-/* Android 로딩 오버레이 */
-function setViewerLoading(on){
-  if(!isAndroid) return; // Android에서만 표시
-  vLoading.classList.toggle('show', !!on);
-}
-
-/* 첫 이미지 로딩/디코드 대기 */
-function waitFirstImageReady(){
-  const first = vSlidesEl.querySelector('img');
-  if(!first) return Promise.resolve();
-  // 스켈레톤 적용
-  first.classList.add('img-skeleton');
-  const done = ()=> first.classList.remove('img-skeleton');
-  const p = first.decode ? first.decode().catch(()=>{}) : Promise.resolve();
-  return Promise.race([
-    new Promise(res=> first.addEventListener('load', ()=>{done(); res();},{once:true})),
-    p.then(()=>{done();}),
-    new Promise(res=> setTimeout(res, 4000)) // 타임아웃 폴백
-  ]);
-}
-
 function openViewer(imgs, caption, date){
   if (Date.now() - _lastOpenAt < 350) return; // 중복 오픈 가드
   _lastOpenAt = Date.now();
 
   vSlidesEl.innerHTML=''; vDotsEl.innerHTML='';
-
-  // Android: 로딩 오버레이 먼저 보여줌
-  setViewerLoading(true);
-
   imgs.forEach((src,i)=>{
     const s=document.createElement('div'); s.className='viewer-slide';
     const img=new Image(); img.src=src; img.alt=`이미지 ${i+1}`; img.setAttribute('draggable','false');
-    img.setAttribute('decoding','async');
-    if(i===0) img.setAttribute('fetchpriority','high');
-    img.classList.add('img-skeleton');
-    img.addEventListener('load', ()=> img.classList.remove('img-skeleton'), {once:true});
-    if(img.complete) img.classList.remove('img-skeleton');
-
     s.appendChild(img); vSlidesEl.appendChild(s);
-
-    const d=document.createElement('div');
-    d.className='viewer-dot';
-    d.addEventListener('click', (e)=>{ e.stopPropagation(); viewerGoTo(i); });
-    vDotsEl.appendChild(d);
+    const d=document.createElement('div'); d.className='viewer-dot'; d.addEventListener('click', (e)=>{ e.stopPropagation(); viewerGoTo(i); }); vDotsEl.appendChild(d);
   });
-
   vCaptionEl.textContent = caption||''; vDateEl.textContent = date||'';
   vIdx=0; viewerUpdate(); resetZoom();
 
@@ -563,9 +474,6 @@ function openViewer(imgs, caption, date){
   document.addEventListener('keydown', escCloseOnce);
   document.body.classList.add('no-scroll');
   stopAutoplay();
-
-  // 첫 이미지 준비되면 로딩 숨김
-  waitFirstImageReady().finally(()=> setViewerLoading(false));
 }
 function closeViewer(){
   stopAutoplay();
@@ -617,7 +525,7 @@ vListBtn .addEventListener('click', closeViewer);
 vShareBtn.addEventListener('click', shareCurrent);
 vPlayBtn .addEventListener('click', ()=>{ isAutoplaying ? stopAutoplay() : startAutoplay(); });
 
-/* Viewer: Pointer 스와이프 + 이미지/텍스트 탭 닫기 */
+/* Viewer: Pointer 스와이프 + 이미지/텍스트 탭 닫기 (확대 중에도) */
 if (USE_POINTER) {
   setupPointerSwipe(vSliderBox,{
     onSwipeLeft: ()=>{ if(zScale===1) viewerStep(+1); },
@@ -659,12 +567,22 @@ vSlidesEl.addEventListener('touchend', ()=>{
 /* 배경/시트 탭은 닫힘 없음(요청대로 유지) */
 backdrop.addEventListener('click', e=>e.stopPropagation());
 
-/* 델리게이션: 팝업 안에서 이미지/캡션/날짜 클릭 시 닫기 */
+/* ✅ 델리게이션: 팝업 안에서 이미지/캡션/날짜 클릭 시 닫기 (PC/모바일 공통) */
 viewer.addEventListener('click', (e)=>{
+  // 컨트롤/도트 클릭은 무시
   if (e.target.closest('#viewerPrev, #viewerNext, #viewerCloseBtn, #viewerListBtn, #viewerShareBtn, #viewerPlayBtn, .viewer-dots')) return;
+
   const hitImg  = e.target.closest('.viewer-slide img');
   const hitText = e.target.closest('#viewerCaption, #viewerDate');
-  if ((hitImg || hitText) && !suppressTapClose) closeViewer();
+  if ((hitImg || hitText) && !suppressTapClose) {
+    closeViewer();
+  }
+});
+
+/* ✔ 이미지 ‘클릭’ 폴백(보강) */
+vSlidesEl.addEventListener('click', (e)=>{
+  if (suppressTapClose) return;
+  if (e.target.closest('.viewer-slide img')) closeViewer();
 });
 
 /* Helper */
