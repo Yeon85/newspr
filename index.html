@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>뉴스&홍보 게시판</title>
+<title>뉴스 – 무한스크롤·슬라이더·보기</title>
 <style>
   :root{ --bg:#f5f6f8; --card:#fff; --ink:#222; --ink2:#666; --line:#e9e9ee; --brand:#0b5bd3; }
   *{box-sizing:border-box}
@@ -81,7 +81,7 @@
   .viewer-nav{position:absolute;top:50%;left:0;right:0;display:flex;justify-content:space-between;transform:translateY(-50%);pointer-events:none;}
   .viewer-nav button{pointer-events:auto;border:none;background:rgba(0,0,0,.35);color:#fff;width:36px;height:36px;border-radius:50%;cursor:pointer}
 
-  .viewer-caption{margin-top:8px;font-size:14px;line-height:1.8;color:#222;max-height:6lh;overflow:auto}
+  .viewer-caption{margin-top:8px;font-size:14px;line-height:1.6;color:#222}
   .viewer-meta{display:flex;justify-content:flex-end;color:#666;font-size:12px;margin-top:8px}
   .viewer-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
   .viewer-actions .ghost{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 14px;cursor:pointer}
@@ -90,25 +90,14 @@
   #viewerSlider.is-zoomed  .viewer-slide img { cursor: grab; }
   #viewerSlider.is-zoomed.is-panning .viewer-slide img { cursor: grabbing; }
 
-  /* 로딩 스피너 */
-  .spinner-wrap{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(255,255,255,.6);z-index:2}
-  .spinner{width:32px;height:32px;border-radius:50%;border:3px solid #ccc;border-top-color:var(--brand);animation:sp 1s linear infinite}
-  @keyframes sp{to{transform:rotate(360deg)}}
-
-  /* ===== 문장 하이라이트(형광펜) ===== */
-  .viewer-caption .seg{
-    padding: 0 2px;
+  /* ===== TTS 하이라이트 ===== */
+  .tts-chunk{
+    position: relative;
+    transition: background .2s ease, box-shadow .2s ease;
     border-radius: 4px;
-    transition: background-color .2s ease, box-shadow .2s ease;
   }
-  .viewer-caption .seg.is-reading{
-    background: linear-gradient(transparent 55%, #fff59d 0);
-    box-shadow: inset 0 -6px 0 #fff59d;
-  }
-  .viewer-caption .seg:hover{
-    background: linear-gradient(transparent 55%, #e8f0fe 0);
-    box-shadow: inset 0 -6px 0 #e8f0fe;
-    cursor: pointer;
+  .tts-chunk.is-reading{
+    box-shadow: inset 0 -0.7em 0 rgba(255, 235, 59, .45); /* 은은한 형광펜 */
   }
 </style>
 </head>
@@ -147,7 +136,6 @@
       </div>
 
       <div class="viewer-slider" data-index="0" id="viewerSlider">
-        <div class="spinner-wrap" id="viewerSpinner"><div class="spinner"></div></div>
         <div class="viewer-slides" id="viewerSlides"></div>
         <div class="viewer-nav">
           <button id="viewerPrev">‹</button>
@@ -169,7 +157,7 @@
 
 <script>
 /* ================================
-   더미 문장
+   긴 더미 문장들 (랜덤 조합)
 ================================ */
 const DUMMY_SENTENCES = [
   "전세보증금 반환을 둘러싼 분쟁이 이어지면서 임차인의 정보 비대칭 해소가 시급하다는 지적이 나온다.",
@@ -193,7 +181,6 @@ const DUMMY_SENTENCES = [
   "임차인 보호를 위한 디지털 서류 검증이 확산되면서 계약 과정의 투명성이 과거보다 높아졌다는 평가도 있다.",
   "시장 참여자들은 금리와 공급, 정책 3요소가 동시에 완화되는 시점을 전환점으로 보고 관망세를 유지하는 분위기다."
 ];
-
 const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 function makeParagraph(min=6,max=12){
   const count=randInt(min,max), used=new Set(), out=[];
@@ -220,7 +207,6 @@ const sentinel=document.getElementById('sentinel');
 const pageTitleEl  = document.getElementById('pageTitle');
 const viewerTitleEl= document.getElementById('viewerTitle');
 
-/* 제목/탭 */
 function setTitleByType(type){
   const label = (type==='news')? '뉴스' : '홍보';
   pageTitleEl.textContent = label;
@@ -234,6 +220,10 @@ function applyActiveTab(){
     t.setAttribute('aria-selected', active ? 'true' : 'false');
   });
 }
+
+/* ================================
+   Tabs
+================================ */
 document.querySelectorAll('.tab').forEach(tab=>{
   tab.addEventListener('click',()=>{
     if(tab.classList.contains('is-active'))return;
@@ -259,15 +249,14 @@ async function fetchPageFromServer(type,cursor,limit){
   const items=[];
   for(let i=start;i<end;i++){
     const id=`${type}-${i}`, seed=`${type}-${i}-${randInt(1,9999)}`;
-    const imgCount = 3;
-    const images=[];
-    for(let k=1;k<=imgCount;k++){
-      images.push(`https://picsum.photos/seed/${seed}-${k}/560/700`);
-    }
     items.push({
       id,
       title: makeParagraph(6,12),
-      images,
+      images:[
+        `https://picsum.photos/seed/${seed}-1/560/700`,
+        `https://picsum.photos/seed/${seed}-2/560/700`,
+        `https://picsum.photos/seed/${seed}-3/560/700`,
+      ],
       date:new Date(Date.now()-i*86400000).toISOString().slice(0,10)
     });
   }
@@ -306,7 +295,7 @@ const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)loadNe
 io.observe(sentinel);
 
 /* ================================
-   카드 컴포넌트
+   Card
 ================================ */
 function buildCard(row){
   const card=document.createElement('article'); card.className='card';
@@ -335,7 +324,7 @@ function buildCard(row){
 }
 
 /* ================================
-   메인 슬라이더 (터치 스와이프 + 탭=뷰어 오픈)
+   메인 슬라이더 (터치 스와이프 + 클릭으로 팝업 열기)
 ================================ */
 function buildMiniSlider(card,srcs,meta){
   const slider=card.querySelector('.mini-slider');
@@ -353,7 +342,7 @@ function buildMiniSlider(card,srcs,meta){
   card.querySelector('.mini-prev').addEventListener('click',()=>goStep(slider,-1));
   card.querySelector('.mini-next').addEventListener('click',()=>goStep(slider,+1));
 
-  // 터치 스와이프 + 방향 잠금
+  // 터치 스와이프 + 방향 잠금(가로면 기본 스크롤 억제)
   let startX=null, startY=null, swiped=false, hLock=false;
   slidesEl.addEventListener('touchstart', e=>{
     const t=e.touches[0]; startX=t.clientX; startY=t.clientY; swiped=false; hLock=false;
@@ -362,7 +351,7 @@ function buildMiniSlider(card,srcs,meta){
     if(startX==null) return;
     const t=e.touches[0], dx=t.clientX-startX, dy=t.clientY-startY;
     if(!hLock && (Math.abs(dx)>8 || Math.abs(dy)>8)){ hLock=Math.abs(dx)>Math.abs(dy); }
-    if(hLock && e.cancelable) e.preventDefault(); // 가로 제스처면 기본 스크롤 억제
+    if(hLock && e.cancelable) e.preventDefault(); // 가로 제스처면 페이지 스크롤 억제
   }, {passive:false});
   slidesEl.addEventListener('touchend', e=>{
     if(startX==null) return;
@@ -371,7 +360,7 @@ function buildMiniSlider(card,srcs,meta){
     startX=startY=null;
   }, {passive:true});
 
-  // 탭/클릭 → 뷰어 열기 (스와이프 직후 합성 탭은 무시)
+  // 한 번 탭/클릭 → 뷰어 열기 (스와이프 직후 합성 탭은 무시)
   slidesEl.addEventListener('click', ()=>{
     if(swiped){ swiped=false; return; }
     openViewer(srcs, meta?.title || '', meta?.date || '');
@@ -395,7 +384,11 @@ const goTo=(slider,i)=>setIndex(slider,i);
 const goStep=(slider,step)=>setIndex(slider,(+slider.dataset.index||0)+step);
 
 /* ================================
-   Viewer (닫기 버튼으로만 닫힘) + 공유 + 자동재생 + 핀치줌 + TTS
+   Viewer
+   - 닫기/목록 버튼으로만 닫힘
+   - 공유: 텍스트 + URL(가능한 한) + 파일
+   - 재생 버튼: TTS만 (이미지 자동넘김 없음)
+   - 핀치줌/팬 + 스와이프
 ================================ */
 const viewer      = document.getElementById('viewer');
 const backdrop    = document.getElementById('viewer-backdrop');
@@ -410,164 +403,8 @@ const vListBtn    = document.getElementById('viewerListBtn');
 const vShareBtn   = document.getElementById('viewerShareBtn');
 const vPlayBtn    = document.getElementById('viewerPlayBtn');
 const vSliderBox  = document.getElementById('viewerSlider');
-const vSpinner    = document.getElementById('viewerSpinner');
 
 let vIdx = 0;
-let autoplayTimer = null;
-const AUTOPLAY_MS = 3000;
-let isAutoplaying = false;
-
-/* ===== TTS(글자 읽기) ===== */
-let ttsEnabled = false;
-let isPaused   = false;      // ✨ 일시정지 상태 표시 (하이라이트 유지)
-let ttsVoice   = null;
-
-function pickKoVoice(){
-  if (!('speechSynthesis' in window)) return;
-  const voices = speechSynthesis.getVoices();
-  ttsVoice = voices.find(v => (v.lang||'').toLowerCase().startsWith('ko'))
-          || voices.find(v => /korean|한국어/i.test(v.name))
-          || voices[0] || null;
-}
-if ('speechSynthesis' in window) {
-  pickKoVoice();
-  window.speechSynthesis.addEventListener('voiceschanged', pickKoVoice);
-}
-
-/* ===== 문장 단위 분할 & 하이라이트 ===== */
-function splitSentencesKorean(text) {
-  if (!text) return [];
-  const trimmed = text.replace(/\s+/g, ' ').trim();
-  const roughParts = trimmed.split(/[\n\r]+|[•·▪●‣◦]+/).map(s => s.trim()).filter(Boolean);
-  const out = [];
-  const re = /(.+?(?:[\.!?…]+|(?:다|요|습니다|습니까|네요|군요|랍니다|였다|된다|했다|일까|일까요|일수도 있다)\s*(?:요)?)(?=\s|$)|.+?$)/g;
-  for (const part of roughParts) {
-    const segs = part.match(re) || [];
-    for (let seg of segs) {
-      seg = seg.trim();
-      if (!seg) continue;
-      if (seg.length > 70) {
-        const chunks = seg.match(/.{1,55}(?:\s|$)/g) || [seg];
-        chunks.forEach(c => out.push(c.trim()));
-      } else {
-        out.push(seg);
-      }
-    }
-  }
-  return out;
-}
-
-let captionSegNodes = [];
-let captionSegIndex = 0;  // 현재(혹은 마지막 하이라이트) 인덱스
-let ttsCurrentUtter = null;
-
-function renderCaptionAsSegments(text) {
-  captionSegNodes = [];
-  // 재렌더 시 현재 인덱스는 0으로
-  captionSegIndex = 0;
-  vCaptionEl.innerHTML = '';
-  const segs = splitSentencesKorean(text);
-  if (segs.length === 0) return;
-
-  const frag = document.createDocumentFragment();
-  segs.forEach((s, i) => {
-    const span = document.createElement('span');
-    span.className = 'seg';
-    span.textContent = s;
-    span.addEventListener('click', (e) => {
-      e.stopPropagation();
-      // 클릭 시 그 문장부터 재생
-      if (!ttsEnabled) { ttsEnabled = true; }
-      isPaused = false;
-      stopAutoplay();
-      startSegmentTTS(i);
-    });
-    frag.appendChild(span);
-    if (i !== segs.length - 1) frag.appendChild(document.createTextNode(' '));
-    captionSegNodes.push(span);
-  });
-  vCaptionEl.appendChild(frag);
-}
-
-function paintCurrentSegment(idx) {
-  captionSegNodes.forEach((n, k) => n.classList.toggle('is-reading', k === idx));
-  const node = captionSegNodes[idx];
-  if (node) {
-    const rect = node.getBoundingClientRect();
-    const box = vCaptionEl.getBoundingClientRect();
-    if (rect.top < box.top || rect.bottom > box.bottom + 60) {
-      node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
-  }
-}
-
-function speakOneSentence(text, onend) {
-  if (!('speechSynthesis' in window)) return;
-  const u = new SpeechSynthesisUtterance(text);
-  if (ttsVoice) u.voice = ttsVoice;
-  u.lang = ttsVoice?.lang || 'ko-KR';
-  u.rate = 1.0;
-  u.pitch = 1.0;
-  u.onend = () => { ttsCurrentUtter = null; onend && onend(); };
-  u.onerror = () => { ttsCurrentUtter = null; onend && onend(); };
-  ttsCurrentUtter = u;
-  speechSynthesis.speak(u);
-}
-
-function startSegmentTTS(startIdx = 0) {
-  if (!captionSegNodes.length) return;
-  // 시작 위치 세팅: 일시정지에서 재시작이면 현재 인덱스 유지
-  captionSegIndex = Math.max(0, Math.min(captionSegNodes.length - 1, startIdx));
-  ttsEnabled = true;
-  isPaused   = false;
-  vPlayBtn.textContent = '일시정지';
-  stopAutoplay(); // 슬라이드 자동 넘김과 독립
-
-  function step() {
-    if (!ttsEnabled || isPaused) return;
-    const span = captionSegNodes[captionSegIndex];
-    if (!span) { finishReadingUI(); return; }
-    paintCurrentSegment(captionSegIndex);
-    const text = span.textContent.trim();
-    speakOneSentence(text, () => {
-      if (!ttsEnabled || isPaused) return;
-      captionSegIndex++;
-      if (captionSegIndex >= captionSegNodes.length) {
-        finishReadingUI();
-      } else {
-        step();
-      }
-    });
-  }
-
-  try { speechSynthesis.cancel(); } catch(_) {}
-  step();
-}
-
-function pauseSegmentTTS() {
-  // ✨ 일시정지: 하이라이트 유지, 음성만 멈춤
-  isPaused = true;
-  try { speechSynthesis.cancel(); } catch(_) {}
-  vPlayBtn.textContent = '재생';
-  // 하이라이트는 제거하지 않음(그대로 유지)
-}
-
-function finishReadingUI() {
-  // 끝났을 때는 모두 초기화
-  ttsEnabled = false;
-  isPaused   = false;
-  vPlayBtn.textContent = '재생';
-  captionSegNodes.forEach(n => n.classList.remove('is-reading'));
-}
-
-function stopAllReadingImmediately() {
-  // 닫기 등에서 완전 종료 (하이라이트 제거)
-  ttsEnabled = false;
-  isPaused   = false;
-  try { speechSynthesis.cancel(); } catch(_) {}
-  vPlayBtn.textContent = '재생';
-  captionSegNodes.forEach(n => n.classList.remove('is-reading'));
-}
 
 /* Zoom/Pan state */
 let zScale = 1, zTx = 0, zTy = 0;
@@ -575,56 +412,39 @@ const Z_MIN = 1, Z_MAX = 4;
 let pinchStartDist = 0, pinchStartScale = 1;
 let panStartX = 0, panStartY = 0, panStartTx = 0, panStartTy = 0;
 let isPanning = false, isPinching = false;
-/* 스와이프/핀치 뒤 합성 탭 방지 */
-let suppressTapClose = false;
-function blockTapCloseBrief(){ suppressTapClose = true; setTimeout(()=>{ suppressTapClose = false; }, 250); }
 
 function viewerImgEl(){ const slide = vSlidesEl.children[vIdx]; return slide ? slide.querySelector('img') : null; }
 function resetZoom(){ zScale=1; zTx=0; zTy=0; const img=viewerImgEl(); if(img) img.style.transform=`translate(0px,0px) scale(1)`; vSliderBox.classList.remove('is-zoomed','is-panning'); }
 function applyZoom(){ const img=viewerImgEl(); if(!img) return; img.style.transform=`translate(${zTx}px,${zTy}px) scale(${zScale})`; if(zScale>1) vSliderBox.classList.add('is-zoomed'); else vSliderBox.classList.remove('is-zoomed','is-panning'); }
 function clampPan(){ const boxW=vSliderBox.clientWidth, boxH=vSliderBox.clientHeight; const maxX=(boxW*(zScale-1))/2, maxY=(boxH*(zScale-1))/2; zTx=Math.max(-maxX,Math.min(maxX,zTx)); zTy=Math.max(-maxY,Math.min(maxY,zTy)); }
 
-/* 로딩 스피너 on/off */
-function showSpinner(on){ vSpinner.style.display = on ? 'flex' : 'none'; }
-
 function openViewer(imgs, caption, date){
   vSlidesEl.innerHTML=''; vDotsEl.innerHTML='';
-  showSpinner(true);
-  let loadedCount = 0;
-  const need = Math.min(imgs.length, 1);
-
   imgs.forEach((src,i)=>{
     const s=document.createElement('div'); s.className='viewer-slide';
-    const img=new Image();
-    img.alt=`이미지 ${i+1}`; img.setAttribute('draggable','false');
-    img.onload = ()=>{ loadedCount++; if(loadedCount>=need) showSpinner(false); };
-    img.onerror= ()=>{ loadedCount++; if(loadedCount>=need) showSpinner(false); };
-    img.src=src;
+    const img=new Image(); img.src=src; img.alt=`이미지 ${i+1}`; img.setAttribute('draggable','false');
     s.appendChild(img); vSlidesEl.appendChild(s);
-
     const d=document.createElement('div'); d.className='viewer-dot'; d.addEventListener('click', (e)=>{ e.stopPropagation(); viewerGoTo(i); }); vDotsEl.appendChild(d);
   });
-
-  // ✨ 문장 하이라이트 렌더
-  renderCaptionAsSegments(caption || '');
-  vDateEl.textContent = date || '';
-
+  vCaptionEl.textContent = caption||''; vDateEl.textContent = date||'';
   vIdx=0; viewerUpdate(); resetZoom();
 
   viewer.style.display='block'; backdrop.style.display='block';
   viewer.setAttribute('aria-hidden','false');
+  document.addEventListener('keydown', escCloseOnce);
   document.body.classList.add('no-scroll');
 
-  stopAutoplay();
-  stopAllReadingImmediately(); // 새로 열 때는 초기화 상태로
+  stopReading(); // 열릴 때는 TTS 정지 상태
 }
 function closeViewer(){
-  stopAutoplay();
-  stopAllReadingImmediately(); // 닫을 때 완전 종료 + 하이라이트 제거
+  stopReading();
   viewer.style.display='none'; backdrop.style.display='none';
   viewer.setAttribute('aria-hidden','true');
+  document.removeEventListener('keydown', escCloseOnce);
   document.body.classList.remove('no-scroll');
 }
+function escCloseOnce(e){ if(e.key==='Escape') closeViewer(); if(e.key==='ArrowLeft') viewerStep(-1); if(e.key==='ArrowRight') viewerStep(+1); }
+
 function viewerGoTo(i){ const total=vSlidesEl.children.length; vIdx=Math.max(0,Math.min(total-1,i)); viewerUpdate(); resetZoom(); }
 function viewerStep(step){ viewerGoTo(vIdx+step); }
 function viewerUpdate(){
@@ -634,126 +454,84 @@ function viewerUpdate(){
   const total = vSlidesEl.children.length;
   vNextBtn.disabled = (vIdx===total-1);
 
-  // 슬라이드 변경 시에도 문장 읽기는 유지 (중단하지 않음)
-  // if (ttsEnabled){ ttsStop(); ttsSpeak(composeCaptionForTTS()); }
-}
-
-/* Autoplay(이미지 슬라이드) */
-function startAutoplay(){
-  if(isAutoplaying) return;
-  isAutoplaying=true; vPlayBtn.textContent='일시정지';
-  autoplayTimer=setInterval(()=>{
-    const total=vSlidesEl.children.length;
-    if(vIdx>=total-1) viewerGoTo(0); else viewerStep(+1);
-  }, AUTOPLAY_MS);
-}
-function stopAutoplay(){
-  isAutoplaying=false;
-  if(autoplayTimer){clearInterval(autoplayTimer); autoplayTimer=null;}
-}
-
-/* Share (파일 + 텍스트 + URL) */
-async function shareCurrent(){
-  const img = viewerImgEl(); if(!img) return;
-
-  const pageUrl = location.href;
-  const imgUrl  = img.src;
-  const title   = (pageTitleEl?.textContent || '뉴스&홍보');
-  const text    = [vCaptionEl.textContent||'', vDateEl.textContent||'', pageUrl].filter(Boolean).join('\n');
-
-  // 안드로이드에서 카톡으로 텍스트까지 보내려면 링크 공유를 권장
-  const isAndroid = /Android/i.test(navigator.userAgent);
-  let preferLink = false;
-
-  if (isAndroid) {
-    preferLink = confirm(
-      '카카오톡에 텍스트/URL까지 보내시려면 "확인"을 눌러 링크 공유로 전송하세요.\n' +
-      '이미지 파일을 그대로 보내려면 "취소"를 누르세요.'
-    );
+  // 슬라이드가 바뀌면 읽는 중이면 다시 셋업
+  if (ttsEnabled){
+    const wasEnabled = ttsEnabled;
+    stopReading();
+    ttsEnabled = wasEnabled;
+    vPlayBtn.textContent = '일시정지';
+    ttsSpeakCurrentCaption();
   }
+}
 
-  vShareBtn.disabled = true;
-  const prev = vShareBtn.textContent;
-  vShareBtn.textContent = '공유 준비 중…';
+/* 컨트롤(전파 차단) */
+[vPrevBtn, vNextBtn, vCloseBtn, vListBtn, vShareBtn, vPlayBtn].forEach(btn=>btn.addEventListener('click', e=>e.stopPropagation()));
+vPrevBtn.addEventListener('click', ()=>{ stopReading(); viewerStep(-1); });
+vNextBtn.addEventListener('click', ()=>{ stopReading(); viewerStep(+1); });
+vCloseBtn.addEventListener('click', closeViewer);
+vListBtn .addEventListener('click', closeViewer);
 
+/* 공유: 텍스트 + URL(+파일 가능 시) */
+async function shareCurrent(){
+  const img=viewerImgEl(); if(!img) return;
+  const title=(pageTitleEl?.textContent||'뉴스&홍보');
+  const textBody = (vCaptionEl.textContent||'').trim();
+  const urlNow = location.href;
+  const composedText = `${textBody}\n\n${urlNow}`;
+
+  const prev=vShareBtn.textContent; vShareBtn.disabled=true; vShareBtn.textContent='공유 준비 중…';
   try{
-    if (preferLink || !('canShare' in navigator)) {
-      // 링크(텍스트+URL) 공유 — 카톡 권장 경로
-      if (navigator.share) {
-        await navigator.share({ title, text, url: pageUrl });
-      } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(`${text}\n${imgUrl}`);
-        alert('텍스트와 링크가 클립보드에 복사되었습니다.');
-      } else {
-        prompt('아래 내용을 복사하세요:', `${text}\n${imgUrl}`);
-      }
+    // 이미지 blob
+    let file=null;
+    try{
+      const res=await fetch(img.src,{mode:'cors',cache:'no-store'});
+      const blob=await res.blob();
+      const mime=blob.type||'image/jpeg';
+      const ext=(mime.split('/')[1]||'jpg').replace('jpeg','jpg');
+      file=new File([blob],`image.${ext}`,{type:mime});
+    }catch(_){}
+
+    // (1) 파일+텍스트(+URL) 시도
+    if(file && navigator.canShare && navigator.canShare({files:[file], text: composedText, title})){
+      await navigator.share({ title, text: composedText, files:[file] });
       return;
     }
-
-    // 파일 공유 (다수 앱에서 텍스트/URL이 무시될 수 있음)
-    let file = null;
-    try{
-      const res  = await fetch(imgUrl, { mode:'cors', cache:'no-store' });
-      const blob = await res.blob();
-      const mime = blob.type || 'image/jpeg';
-      const ext  = (mime.split('/')[1] || 'jpg').replace('jpeg','jpg');
-      file = new File([blob], `image.${ext}`, { type: mime });
-    }catch(_){}
-
-    if (file && navigator.canShare({ files:[file] })) {
-      // 일부 앱(특히 카톡)에서 text/url을 무시할 수 있음
-      await navigator.share({ title, text, url: pageUrl, files:[file] });
-    } else if (navigator.share) {
-      await navigator.share({ title, text, url: pageUrl });
-    } else if (navigator.clipboard) {
-      await navigator.clipboard.writeText(`${text}\n${imgUrl}`);
-      alert('텍스트와 링크가 클립보드에 복사되었습니다.');
-    } else {
-      prompt('아래 내용을 복사하세요:', `${text}\n${imgUrl}`);
+    // (2) 파일만 가능한 환경 → 파일 + (텍스트는 무시될 수 있음)
+    if(file && navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({ title, text: composedText, files:[file] });
+      return;
     }
+    // (3) 일반 share: 텍스트+URL
+    if(navigator.share){
+      await navigator.share({ title, text: composedText, url: img.src });
+      return;
+    }
+    // (4) 폴백: 클립보드
+    if (navigator.clipboard){
+      await navigator.clipboard.writeText(composedText + `\n${img.src}`);
+      alert('텍스트와 URL이 클립보드에 복사되었습니다.');
+      return;
+    }
+    // (5) 최후: 프롬프트
+    prompt('아래 내용을 복사하세요:', composedText + `\n${img.src}`);
   }catch(e){
-    // 폴백: 최소한 텍스트/링크는 넘기기
-    try{
-      if (navigator.clipboard) {
-        await navigator.clipboard.writeText(`${text}\n${imgUrl}`);
-        alert('텍스트와 링크가 클립보드에 복사되었습니다.');
-      } else {
-        prompt('아래 내용을 복사하세요:', `${text}\n${imgUrl}`);
-      }
-    }catch(_){}
+    console.error(e);
   }finally{
-    vShareBtn.disabled = false;
-    vShareBtn.textContent = prev;
+    vShareBtn.disabled=false; vShareBtn.textContent=prev;
   }
 }
-
-
-/* 컨트롤 전파 차단 */
-[vPrevBtn, vNextBtn, vListBtn, vShareBtn, vPlayBtn].forEach(btn=>btn.addEventListener('click', e=>e.stopPropagation()));
-vPrevBtn.addEventListener('click', ()=> viewerStep(-1));
-vNextBtn.addEventListener('click', ()=> viewerStep(+1));
-vListBtn .addEventListener('click', closeViewer);
 vShareBtn.addEventListener('click', shareCurrent);
 
-/* ✨ 재생 버튼: 일시정지 유지 하이라이트 + 재개 시 같은 문장부터 */
-vPlayBtn .addEventListener('click', ()=>{
-  if (ttsEnabled && !isPaused){
-    // → 일시정지(하이라이트 유지)
-    pauseSegmentTTS();
-    return;
-  }
-  // (재)시작: 현재 하이라이트된 인덱스 기준
-  const resumeIdx = Math.max(0, Math.min(captionSegNodes.length-1, captionSegIndex));
-  startSegmentTTS(resumeIdx);
-});
+/* 배경/시트 클릭으로는 닫히지 않게 */
+backdrop.addEventListener('click', e=>e.stopPropagation());
+viewer.addEventListener('click',  e=>e.stopPropagation());
 
-vCloseBtn.addEventListener('click', closeViewer);
-
-/* Viewer: 슬라이드 스와이프(확대 안했을 때) */
+/* Viewer: 스와이프(확대 X일 때), 방향잠금 */
 let vStartX=null, vStartY=null, vHLock=false;
 vSlidesEl.addEventListener('touchstart', e=>{
   if (e.touches.length===1 && zScale===1){
     vStartX=e.touches[0].clientX; vStartY=e.touches[0].clientY; vHLock=false;
+    stopReading();
   }
 },{passive:true});
 vSlidesEl.addEventListener('touchmove', e=>{
@@ -764,21 +542,20 @@ vSlidesEl.addEventListener('touchmove', e=>{
   if(vHLock && e.cancelable) e.preventDefault();
 },{passive:false});
 vSlidesEl.addEventListener('touchend', e=>{
-  if (vStartX==null || zScale!==1) return;
+  if(vStartX==null) return;
   const dx=e.changedTouches[0].clientX-vStartX;
   if(Math.abs(dx)>40) dx<0 ? viewerStep(+1) : viewerStep(-1);
   vStartX=vStartY=null; vHLock=false;
-  blockTapCloseBrief();
 },{passive:true});
 
-/* Pinch Zoom + Pan (터치) */
+/* 핀치줌/팬 (터치) */
 vSlidesEl.addEventListener('touchstart', (e)=>{
   if (e.touches.length===2){
     isPinching=true; isPanning=false;
-    const [a,b]=e.touches; pinchStartDist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY); pinchStartScale=zScale; stopAutoplay();
+    const [a,b]=e.touches; pinchStartDist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY); pinchStartScale=zScale; stopReading();
   } else if (e.touches.length===1 && zScale>1){
     isPanning=true; isPinching=false;
-    const t=e.touches[0]; panStartX=t.clientX; panStartY=t.clientY; panStartTx=zTx; panStartTy=zTy; vSliderBox.classList.add('is-panning'); stopAutoplay();
+    const t=e.touches[0]; panStartX=t.clientX; panStartY=t.clientY; panStartTx=zTx; panStartTy=zTy; vSliderBox.classList.add('is-panning'); stopReading();
   }
 },{passive:false});
 vSlidesEl.addEventListener('touchmove', (e)=>{
@@ -792,10 +569,10 @@ vSlidesEl.addEventListener('touchmove', (e)=>{
   }
 },{passive:false});
 vSlidesEl.addEventListener('touchend', ()=>{
-  if (isPinching || isPanning){ isPinching=false; isPanning=false; vSliderBox.classList.remove('is-panning'); blockTapCloseBrief(); }
+  if (isPinching || isPanning){ isPinching=false; isPanning=false; vSliderBox.classList.remove('is-panning'); }
 },{passive:true});
 
-/* 마우스 휠 줌(데스크톱: Ctrl + 휠) */
+/* 마우스 휠 줌(데스크톱: Ctrl + 휠), 드래그 팬 */
 vSlidesEl.addEventListener('wheel', (e)=>{
   if(!e.ctrlKey) return;
   e.preventDefault();
@@ -804,15 +581,13 @@ vSlidesEl.addEventListener('wheel', (e)=>{
   zScale = Math.max(Z_MIN, Math.min(Z_MAX, zScale * factor));
   clampPan(); applyZoom();
 },{passive:false});
-
-/* 마우스 드래그로 팬 */
 vSlidesEl.addEventListener('mousedown', (e)=>{
   if (zScale<=1 || e.button!==0) return;
   isPanning = true; isPinching = false;
   panStartX = e.clientX; panStartY = e.clientY;
   panStartTx = zTx; panStartTy = zTy;
   vSliderBox.classList.add('is-panning');
-  stopAutoplay();
+  stopReading();
   e.preventDefault();
 });
 window.addEventListener('mousemove', (e)=>{
@@ -825,6 +600,80 @@ window.addEventListener('mousemove', (e)=>{
 });
 window.addEventListener('mouseup', ()=>{
   if (isPanning){ isPanning=false; vSliderBox.classList.remove('is-panning'); }
+});
+
+/* ================================
+   TTS + 형광펜 하이라이트
+================================ */
+let ttsEnabled = false;
+const synth = window.speechSynthesis;
+let ttsQueue = [];
+let ttsIdx   = -1;
+
+function composeCaptionForTTS(){
+  return (vCaptionEl.textContent || '').trim();
+}
+
+function prepareCaptionChunks(){
+  const text = (vCaptionEl.getAttribute('data-raw') ?? composeCaptionForTTS()).trim();
+  const chunks = (text.match(/.+?(?:[\.?!…]|$)/g) || [])
+                  .map(s=>s.trim()).filter(Boolean);
+  vCaptionEl.innerHTML = '';
+  chunks.forEach((s,i)=>{
+    const span = document.createElement('span');
+    span.className = 'tts-chunk';
+    span.textContent = s + (i===chunks.length-1 ? '' : ' ');
+    vCaptionEl.appendChild(span);
+  });
+  return chunks;
+}
+function clearHighlight(){ vCaptionEl.querySelectorAll('.tts-chunk').forEach(el=>el.classList.remove('is-reading')); }
+function highlightChunk(i){
+  const nodes = [...vCaptionEl.querySelectorAll('.tts-chunk')];
+  nodes.forEach((el,k)=> el.classList.toggle('is-reading', k===i));
+}
+
+function ttsSpeakCurrentCaption(){
+  if (!('speechSynthesis' in window)) {
+    vCaptionEl.setAttribute('data-raw', composeCaptionForTTS());
+    prepareCaptionChunks(); highlightChunk(0); setTimeout(clearHighlight, 1200);
+    return;
+  }
+  vCaptionEl.setAttribute('data-raw', composeCaptionForTTS());
+  ttsQueue = prepareCaptionChunks();
+  ttsIdx = -1;
+  speakNext();
+}
+function speakNext(){
+  if (!ttsEnabled) return;
+  ttsIdx++;
+  if (ttsIdx >= ttsQueue.length){ stopReading(); return; }
+  clearHighlight(); highlightChunk(ttsIdx);
+
+  const u = new SpeechSynthesisUtterance(ttsQueue[ttsIdx]);
+  u.lang  = 'ko-KR'; u.rate = 1.0; u.pitch = 1.0;
+  u.onend   = ()=> speakNext();
+  u.onerror = ()=> speakNext();
+
+  try{ synth.cancel(); }catch(_){}
+  synth.speak(u);
+}
+function startReading(){
+  ttsEnabled = true;
+  vPlayBtn.textContent = '일시정지';
+  ttsSpeakCurrentCaption();
+}
+function stopReading(){
+  ttsEnabled = false;
+  vPlayBtn.textContent = '재생';
+  try{ synth.cancel(); }catch(_){}
+  clearHighlight();
+}
+
+/* 버튼: 재생= TTS 토글 */
+vPlayBtn.addEventListener('click', ()=>{
+  if (ttsEnabled) stopReading();
+  else startReading();
 });
 
 /* Helper */
