@@ -32,11 +32,12 @@
   .mini-slider{
     position:relative;border-radius:12px;overflow:hidden;background:#ddd;
     overscroll-behavior:contain; touch-action:pan-y;
+    aspect-ratio:4/5; /* ← 높이 선점으로 깜빡임 방지 */
   }
   .mini-slides{display:flex;transition:transform .35s ease}
   .mini-slide{min-width:100%}
   .mini-slide img{
-    display:block;width:100%;aspect-ratio:4/5;object-fit:cover;  /* 280×350 비율 */
+    display:block;width:100%;aspect-ratio:4/5;object-fit:cover;
     cursor:pointer; -webkit-user-drag:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   }
   .mini-slider, .mini-slides, .mini-slide img{ overscroll-behavior:contain; touch-action:pan-y; }
@@ -61,13 +62,18 @@
 
   /* ===== 팝업(뷰어) ===== */
   .viewer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:999;}
-  .viewer{position:fixed;inset:0;display:none;z-index:1000;overflow:auto;overscroll-behavior:contain}
+  .viewer{position:fixed;inset:0;display:none;z-index:1000;overflow:auto;overscroll-behavior:contain;transform:translateZ(0)}
   .viewer .sheet{max-width:520px;margin:20px auto;background:#fff;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.2);padding:14px}
+
   .viewer-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
   .viewer-title{font-weight:700}
   .viewer-close{border:1px solid var(--line);background:#fff;border-radius:10px;padding:6px 10px;cursor:pointer}
 
-  .viewer-slider{position:relative;border-radius:12px;overflow:hidden;background:#ddd;touch-action:pan-y;overscroll-behavior:contain}
+  .viewer-slider{
+    position:relative;border-radius:12px;overflow:hidden;background:#ddd;
+    touch-action:pan-y;overscroll-behavior:contain;
+    aspect-ratio:4/5; /* ← 높이 선점 */
+  }
   .viewer-slides{display:flex;transition:transform .35s ease}
   .viewer-slide{min-width:100%}
   .viewer-slide img{
@@ -367,6 +373,7 @@ function buildMiniSlider(card,srcs,meta){
       onSwipeRight:()=>goStep(slider,-1),
       onTap:(e)=>{
         if (e.target.closest('button') || e.target.closest('.mini-dots')) return;
+        e.stopPropagation(); // ← 열자마자 닫히는 일 방지
         openViewer(srcs, meta?.title||'', meta?.date||'');
       },
       lockThreshold: 10,
@@ -392,9 +399,11 @@ function buildMiniSlider(card,srcs,meta){
     }, {passive:true});
   }
 
+  /* 클릭 폴백(포인터 캡처 대비) + 이벤트 전파 차단 */
   slider.addEventListener('click', (e)=>{
     if (e.target.closest('button') || e.target.closest('.mini-dots')) return;
     if (Date.now() - _lastOpenAt < 350) return;
+    e.preventDefault(); e.stopPropagation();       /* ← 중요 */
     openViewer(srcs, meta?.title || '', meta?.date || '');
   });
 
@@ -449,6 +458,7 @@ function resetZoom(){ zScale=1; zTx=0; zTy=0; const img=viewerImgEl(); if(img) i
 function applyZoom(){ const img=viewerImgEl(); if(!img) return; img.style.transform=`translate(${zTx}px,${zTy}px) scale(${zScale})`; if(zScale>1) vSliderBox.classList.add('is-zoomed'); else vSliderBox.classList.remove('is-zoomed','is-panning'); }
 function clampPan(){ const boxW=vSliderBox.clientWidth, boxH=vSliderBox.clientHeight; const maxX=(boxW*(zScale-1))/2, maxY=(boxH*(zScale-1))/2; zTx=Math.max(-maxX,Math.min(maxX,zTx)); zTy=Math.max(-maxY,Math.min(maxY,zTy)); }
 
+/* 열기 */
 function openViewer(imgs, caption, date){
   if (Date.now() - _lastOpenAt < 350) return;
   _lastOpenAt = Date.now();
@@ -468,7 +478,12 @@ function openViewer(imgs, caption, date){
   document.addEventListener('keydown', escCloseOnce);
   document.body.classList.add('no-scroll');
   stopAutoplay();
+
+  /* ← 열자마자 동일 입력이 닫기 로직으로 전파되는 것 방지 */
+  blockTapCloseBrief();
 }
+
+/* 닫기 */
 function closeViewer(){
   stopAutoplay();
   viewer.style.display='none'; backdrop.style.display='none';
@@ -510,7 +525,7 @@ async function shareCurrent(){
   }finally{ vShareBtn.disabled=false; vShareBtn.textContent=prev; }
 }
 
-/* 컨트롤 이벤트 (전파 차단) */
+/* 컨트롤(전파 차단) */
 [vPrevBtn, vNextBtn, vCloseBtn, vListBtn, vShareBtn, vPlayBtn].forEach(btn=>btn.addEventListener('click', e=>e.stopPropagation()));
 vPrevBtn.addEventListener('click', ()=> viewerStep(-1));
 vNextBtn.addEventListener('click', ()=> viewerStep(+1));
@@ -519,33 +534,16 @@ vListBtn .addEventListener('click', closeViewer);
 vShareBtn.addEventListener('click', shareCurrent);
 vPlayBtn .addEventListener('click', ()=>{ isAutoplaying ? stopAutoplay() : startAutoplay(); });
 
-/* ====== 여기부터 '클릭/탭으로 닫기'를 견고하게 ====== */
-/* 1) PointerEvent: 슬라이더 컨테이너에서 onTap → 버튼/도트 제외, 어디든 닫기  */
-if (USE_POINTER) {
-  setupPointerSwipe(vSliderBox,{
-    onSwipeLeft: ()=>{ if(zScale===1) viewerStep(+1); },
-    onSwipeRight:()=>{ if(zScale===1) viewerStep(-1); },
-    onTap:(e)=>{
-      if (suppressTapClose) return;
-      if (e.target.closest('#viewerPrev, #viewerNext, #viewerCloseBtn, #viewerListBtn, #viewerShareBtn, #viewerPlayBtn, .viewer-dots, .viewer-actions, .viewer-header')) return;
-      closeViewer();
-    },
-    enableWhen:()=>true
-  });
-}
-
-/* 2) 클릭 폴백: Chrome에서 pointer capture로 target이 바뀌어도 닫히게 슬라이드 전체에 바인딩 */
+/* 팝업 내부 닫기: 이미지/캡션/날짜 클릭 */
 vSlidesEl.addEventListener('click', (e)=>{
   if (suppressTapClose) return;
   if (e.target.closest('#viewerPrev, #viewerNext, .viewer-dots')) return;
   closeViewer();
 });
-
-/* 3) 캡션/날짜 클릭 시 닫기 */
 vCaptionEl.addEventListener('click', ()=>{ if(!suppressTapClose) closeViewer(); });
 vDateEl   .addEventListener('click', ()=>{ if(!suppressTapClose) closeViewer(); });
 
-/* 4) 터치 핀치/팬 (닫힘 방지 플래그 포함) */
+/* 터치 핀치/팬 */
 vSlidesEl.addEventListener('touchstart', (e)=>{
   if(e.touches.length===2){
     isPinching=true; isPanning=false;
