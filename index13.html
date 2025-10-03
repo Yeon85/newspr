@@ -158,6 +158,7 @@ const DUMMY_SENTENCES = [
   "임차인 보호를 위한 디지털 서류 검증이 확산되면서 계약 과정의 투명성이 과거보다 높아졌다는 평가도 있다.",
   "시장 참여자들은 금리와 공급, 정책 3요소가 동시에 완화되는 시점을 전환점으로 보고 관망세를 유지하는 분위기다."
 ];
+let _lastOpenAt = 0;
 const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 function makeParagraph(min=4,max=10){
   const count=randInt(min,max), used=new Set(), out=[];
@@ -427,6 +428,9 @@ function applyZoom(){ const img=viewerImgEl(); if(!img) return; img.style.transf
 function clampPan(){ const boxW=vSliderBox.clientWidth, boxH=vSliderBox.clientHeight; const maxX=(boxW*(zScale-1))/2, maxY=(boxH*(zScale-1))/2; zTx=Math.max(-maxX,Math.min(maxX,zTx)); zTy=Math.max(-maxY,Math.min(maxY,zTy)); }
 
 function openViewer(imgs, caption, date){
+ // 같은 제스처에서 이어진 'click'이 따라오는 안드/PC 이중호출 방지
+  if (Date.now() - _lastOpenAt < 350) return;
+  _lastOpenAt = Date.now();
   vSlidesEl.innerHTML=''; vDotsEl.innerHTML='';
   imgs.forEach((src,i)=>{
     const s=document.createElement('div'); s.className='viewer-slide';

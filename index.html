@@ -507,55 +507,84 @@ async function shareCurrent(){
   const img = viewerImgEl();
   if (!img) return;
 
-  const title = (pageTitleEl?.textContent || '뉴스&홍보');
-  const text  = vCaptionEl.textContent || '';
+   const title   = (pageTitleEl?.textContent || '뉴스&홍보');
+  const text    = (vCaptionEl.textContent || '').trim();
+  const pageUrl = location.href;   // 현재 페이지 주소
+  const imgUrl  = img.src;
+
+//https://onestop.khug.or.kr/renterStep01.html?id=K20250729000009
 
   const prevTxt = vShareBtn.textContent;
   vShareBtn.disabled = true;
   vShareBtn.textContent = '공유 준비 중…';
 
-  try{
-    // 현재 이미지 blob (CORS 허용 필요)
-    const res  = await fetch(img.src, { mode: 'cors', cache: 'no-store' });
-    const blob = await res.blob();
-    const mime = blob.type || 'image/jpeg';
-    const ext  = (mime.split('/')[1] || 'jpg').replace('jpeg','jpg');
-    const file = new File([blob], `image.${ext}`, { type: mime });
-
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ title, text, files: [file] });
-      return;
-    }
-    if (navigator.share) { // 파일 공유 불가 → 링크 공유
-      await navigator.share({ title, text, url: img.src });
-      return;
-    }
-    if (navigator.clipboard && window.ClipboardItem) { // 이미지 복사 시도
-      try{
-        await navigator.clipboard.write([ new ClipboardItem({ [mime]: blob }) ]);
-        alert('이미지가 클립보드에 복사되었습니다.');
-        return;
-      }catch(e){}
-    }
-    // 최종 폴백
-    if (navigator.clipboard) {
-      await navigator.clipboard.writeText(`${text}\n${img.src}`);
-      alert('링크가 클립보드에 복사되었습니다.');
-    } else {
-      const a=document.createElement('a'); a.href=img.src; a.download=`image.${ext}`;
-      document.body.appendChild(a); a.click(); a.remove();
-    }
-  }catch(err){
-    console.error('share error:', err);
+// 최종 공유 텍스트(이미지 URL + 페이지 URL 포함)
+  const fullText = [text, imgUrl, pageUrl].filter(Boolean).join('\n');
+ // Web Share API로 시도할 때 조합별 순차 폴백
+  const tryShare = async (data) => {
     try{
-      if (navigator.clipboard) {
-        await navigator.clipboard.writeText(img.src);
-        alert('이미지 링크가 클립보드에 복사되었습니다.');
-      } else {
-        prompt('아래 링크를 복사하세요:', img.src);
-      }
+      // canShare가 있으면 먼저 검사
+      if (navigator.canShare && !navigator.canShare(data)) return false;
+      if (navigator.share) { await navigator.share(data); return true; }
     }catch(_){}
-  } finally{
+    return false;
+  };
+
+  try{
+    // 1) 이미지 파일 준비 (가능하면)
+    let file = null, mime = 'image/jpeg';
+    try{
+      const res  = await fetch(img.src, { mode: 'cors', cache: 'no-store' });
+      const blob = await res.blob();
+      mime = blob.type || 'image/jpeg';
+      const ext  = (mime.split('/')[1] || 'jpg').replace('jpeg','jpg');
+      file = new File([blob], `image.${ext}`, { type: mime });
+    }catch(_){ /* 파일화 실패해도 아래 폴백 진행 */ }
+
+    // 2) 가능한 최상 조합부터 시도
+    // (A) 파일 + 텍스트 + URL (일부 브라우저에서 지원)
+    if (file && await tryShare({ title, text: fullText, url: pageUrl, files: [file] })) return;
+
+    // (B) 파일 + 텍스트 (URL은 텍스트에 포함돼 있으므로 ok)
+    if (file && await tryShare({ title, text: fullText, files: [file] })) return;
+
+    // (C) 텍스트 + URL (파일 불가 환경: iOS Safari 등)
+    if (await tryShare({ title, text, url: pageUrl })) return;
+
+    // (D) 텍스트만
+    if (await tryShare({ title, text: fullText })) return;
+
+    // 3) 클립보드 폴백 (가능하면 이미지+텍스트 동시)
+    if (navigator.clipboard) {
+      try{
+        if (file && window.ClipboardItem) {
+          const item = new ClipboardItem({
+            [mime]: file,
+            'text/plain': new Blob([fullText], { type: 'text/plain' })
+          });
+          await navigator.clipboard.write([item]);
+          alert('이미지와 텍스트(링크 포함)가 클립보드에 복사되었습니다.');
+          return;
+        }
+      }catch(_){ /* 이미지 동시복사 실패 시 텍스트만 복사 */ }
+
+      await navigator.clipboard.writeText(fullText);
+      alert('텍스트와 링크가 클립보드에 복사되었습니다.');
+      return;
+    }
+
+    // 4) 최후: 이미지 다운로드 링크 열기 + 프롬프트
+    if (file) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(file);
+      a.download = 'image.jpg';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+    prompt('아래 텍스트와 링크를 복사하세요:', fullText);
+
+  } finally {
     vShareBtn.disabled = false;
     vShareBtn.textContent = prevTxt;
   }
@@ -581,7 +610,7 @@ viewer.addEventListener('click', (e)=>{ e.stopPropagation(); });
 vPrevBtn.addEventListener('click', ()=> viewerStep(-1));
 vNextBtn.addEventListener('click', ()=> viewerStep(+1));
 vCloseBtn.addEventListener('click', closeViewer);
-vListBtn .addEventListener('click', closeViewer);
+//vListBtn .addEventListener('click', closeViewer);
 vShareBtn.addEventListener('click', shareCurrent);
 vPlayBtn .addEventListener('click', ()=>{ isAutoplaying ? stopAutoplay() : startAutoplay(); });
 
