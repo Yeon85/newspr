@@ -654,47 +654,79 @@ function stopAutoplay(){
 
 /* Share (파일 + 텍스트 + URL) */
 async function shareCurrent(){
-  const img=viewerImgEl(); if(!img) return;
+  const img = viewerImgEl(); if(!img) return;
+
   const pageUrl = location.href;
   const imgUrl  = img.src;
-  const title   = (pageTitleEl?.textContent||'뉴스&홍보');
-  const text    = [(vCaptionEl.textContent||'').trim(), (vDateEl.textContent||'').trim(), pageUrl].filter(Boolean).join('\n');
+  const title   = (pageTitleEl?.textContent || '뉴스&홍보');
+  const text    = [vCaptionEl.textContent||'', vDateEl.textContent||'', pageUrl].filter(Boolean).join('\n');
 
-  const prev=vShareBtn.textContent; vShareBtn.disabled=true; vShareBtn.textContent='공유 준비 중…';
+  // 안드로이드에서 카톡으로 텍스트까지 보내려면 링크 공유를 권장
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  let preferLink = false;
+
+  if (isAndroid) {
+    preferLink = confirm(
+      '카카오톡에 텍스트/URL까지 보내시려면 "확인"을 눌러 링크 공유로 전송하세요.\n' +
+      '이미지 파일을 그대로 보내려면 "취소"를 누르세요.'
+    );
+  }
+
+  vShareBtn.disabled = true;
+  const prev = vShareBtn.textContent;
+  vShareBtn.textContent = '공유 준비 중…';
+
   try{
-    let file=null;
+    if (preferLink || !('canShare' in navigator)) {
+      // 링크(텍스트+URL) 공유 — 카톡 권장 경로
+      if (navigator.share) {
+        await navigator.share({ title, text, url: pageUrl });
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(`${text}\n${imgUrl}`);
+        alert('텍스트와 링크가 클립보드에 복사되었습니다.');
+      } else {
+        prompt('아래 내용을 복사하세요:', `${text}\n${imgUrl}`);
+      }
+      return;
+    }
+
+    // 파일 공유 (다수 앱에서 텍스트/URL이 무시될 수 있음)
+    let file = null;
     try{
-      const res=await fetch(imgUrl,{mode:'cors',cache:'no-store'}); const blob=await res.blob();
-      const mime=blob.type||'image/jpeg'; const ext=(mime.split('/')[1]||'jpg').replace('jpeg','jpg');
-      file=new File([blob],`image.${ext}`,{type:mime});
+      const res  = await fetch(imgUrl, { mode:'cors', cache:'no-store' });
+      const blob = await res.blob();
+      const mime = blob.type || 'image/jpeg';
+      const ext  = (mime.split('/')[1] || 'jpg').replace('jpeg','jpg');
+      file = new File([blob], `image.${ext}`, { type: mime });
     }catch(_){}
 
-    if(file && navigator.canShare && navigator.canShare({files:[file]})){
-      try{ await navigator.share({ title, text, url: pageUrl, files:[file] }); vShareBtn.disabled=false; vShareBtn.textContent=prev; return; }catch(e){}
-    }
-    if(navigator.share){
+    if (file && navigator.canShare({ files:[file] })) {
+      // 일부 앱(특히 카톡)에서 text/url을 무시할 수 있음
+      await navigator.share({ title, text, url: pageUrl, files:[file] });
+    } else if (navigator.share) {
       await navigator.share({ title, text, url: pageUrl });
-      vShareBtn.disabled=false; vShareBtn.textContent=prev; return;
-    }
-    if(navigator.clipboard){
+    } else if (navigator.clipboard) {
       await navigator.clipboard.writeText(`${text}\n${imgUrl}`);
       alert('텍스트와 링크가 클립보드에 복사되었습니다.');
-    }else{
+    } else {
       prompt('아래 내용을 복사하세요:', `${text}\n${imgUrl}`);
     }
   }catch(e){
+    // 폴백: 최소한 텍스트/링크는 넘기기
     try{
-      if(navigator.clipboard){
+      if (navigator.clipboard) {
         await navigator.clipboard.writeText(`${text}\n${imgUrl}`);
         alert('텍스트와 링크가 클립보드에 복사되었습니다.');
-      }else{
+      } else {
         prompt('아래 내용을 복사하세요:', `${text}\n${imgUrl}`);
       }
     }catch(_){}
   }finally{
-    vShareBtn.disabled=false; vShareBtn.textContent=prev;
+    vShareBtn.disabled = false;
+    vShareBtn.textContent = prev;
   }
 }
+
 
 /* 컨트롤 전파 차단 */
 [vPrevBtn, vNextBtn, vListBtn, vShareBtn, vPlayBtn].forEach(btn=>btn.addEventListener('click', e=>e.stopPropagation()));
