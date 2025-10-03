@@ -8,12 +8,11 @@
   :root{ --bg:#f5f6f8; --card:#fff; --ink:#222; --ink2:#666; --line:#e9e9ee; --brand:#0b5bd3; }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans KR",Arial,sans-serif;color:var(--ink)}
-  body.no-scroll{ overflow:hidden; }
 
   /* Header */
   header{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);z-index:20}
   .bar{max-width:520px;margin:0 auto;display:flex;align-items:center;gap:8px;padding:10px 12px}
-  .chip{min-width:34px;height:34px;border:1px solid var(--line);border-radius:10px;display:grid;place-items:center;background:#fff;text-decoration:none;color:inherit}
+  .chip{min-width:34px;height:34px;border:1px solid var(--line);border-radius:10px;display:grid;place-items:center;background:#fff}
   .title{font-weight:700;margin-left:6px}
   .bar-right{margin-left:auto;display:flex;gap:8px}
 
@@ -28,20 +27,16 @@
   .list{display:block}
   .card{background:var(--card);border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.06);padding:12px;margin-bottom:14px}
 
-  /* ===== 메인 카드 슬라이더 ===== */
-  .mini-slider{
-    position:relative;border-radius:12px;overflow:hidden;background:#ddd;
-    overscroll-behavior:contain; touch-action:pan-y;
-  }
-  .mini-slides{display:flex;transition:transform .35s ease}
+  /* Slider inside card */
+  .mini-slider{position:relative;border-radius:12px;overflow:hidden;background:#ddd;overscroll-behavior:contain}
+  .mini-slides{display:flex;transition:transform .35s ease;touch-action:pan-y}  /* 세로만 브라우저 스크롤 허용 */
   .mini-slide{min-width:100%}
   .mini-slide img{
-    display:block;width:100%;aspect-ratio:4/5;object-fit:cover;  /* 280×350 비율 */
-    cursor:pointer; -webkit-user-drag:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+    display:block;width:100%;aspect-ratio:4/5;object-fit:cover; /* 280×350 비율 유지 */
+    cursor:pointer;
+    -webkit-user-drag:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   }
-  .mini-slider, .mini-slides, .mini-slide img{ overscroll-behavior:contain; touch-action:pan-y; }
-
-  /* ‹ › : 두 번째 장부터 보이기 */
+  /* 사진 안 ‹› : 두 번째 장부터 보이게 */
   .mini-nav{position:absolute;top:50%;left:0;right:0;display:flex;justify-content:space-between;transform:translateY(-50%);pointer-events:none;opacity:0;transition:opacity .2s}
   .mini-nav button{pointer-events:auto;border:none;background:rgba(0,0,0,.35);color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer}
   .mini-slider.show-nav .mini-nav{opacity:1}
@@ -59,7 +54,7 @@
 
   .sentinel{height:24px}
 
-  /* ===== 팝업(뷰어) ===== */
+  /* ====== Fullscreen Viewer ====== */
   .viewer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:999;}
   .viewer{position:fixed;inset:0;display:none;z-index:1000;overflow:auto;overscroll-behavior:contain}
   .viewer .sheet{max-width:520px;margin:20px auto;background:#fff;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.2);padding:14px}
@@ -67,28 +62,33 @@
   .viewer-title{font-weight:700}
   .viewer-close{border:1px solid var(--line);background:#fff;border-radius:10px;padding:6px 10px;cursor:pointer}
 
-  .viewer-slider{position:relative;border-radius:12px;overflow:hidden;background:#ddd;touch-action:pan-y;overscroll-behavior:contain}
-  .viewer-slides{display:flex;transition:transform .35s ease}
+  .viewer-slider{position:relative;border-radius:12px;overflow:hidden;background:#ddd;overscroll-behavior:contain}
+  .viewer-slides{display:flex;transition:transform .35s ease;touch-action:pan-y} /* 세로만 브라우저 스크롤 허용 */
   .viewer-slide{min-width:100%}
   .viewer-slide img{
     display:block;width:100%;aspect-ratio:4/5;object-fit:cover;
     touch-action:none; transform-origin:center center; will-change: transform;
-    cursor:pointer; -webkit-user-drag:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+    cursor:pointer;
+    -webkit-user-drag:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   }
   .viewer-dots{display:flex;gap:8px;justify-content:center;align-items:center;padding:10px 0 6px}
   .viewer-dot{width:8px;height:8px;border-radius:50%;background:#cfd3da;cursor:pointer}
   .viewer-dot.active{background:var(--brand)}
-  .viewer-nav{position:absolute;top:50%;left:0;right:0;display:flex;justify-content:space-between;transform:translateY(-50%);pointer-events:none;}
+  .viewer-nav{position:absolute;top:50%;left:0;right:0;display:flex;justify-content:space-between;transform:translateY(-50%);pointer-events:none;} /* ← 전체 컨테이너는 터치 통과 */
   .viewer-nav button{pointer-events:auto;border:none;background:rgba(0,0,0,.35);color:#fff;width:36px;height:36px;border-radius:50%;cursor:pointer}
 
-  .viewer-caption{margin-top:8px;font-size:14px;line-height:1.6;color:#222;cursor:pointer}
-  .viewer-meta{display:flex;justify-content:flex-end;color:#666;font-size:12px;margin-top:8px;cursor:pointer}
+  .viewer-caption{margin-top:8px;font-size:14px;line-height:1.6;color:#222}
+  .viewer-meta{display:flex;justify-content:flex-end;color:#666;font-size:12px;margin-top:8px}
   .viewer-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
   .viewer-actions .ghost{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 14px;cursor:pointer}
   .viewer-actions .primary{border:1px solid var(--brand);background:var(--brand);color:#fff;border-radius:10px;padding:8px 14px;cursor:pointer}
 
+  /* 확대 중 커서 피드백 */
   #viewerSlider.is-zoomed  .viewer-slide img { cursor: grab; }
   #viewerSlider.is-zoomed.is-panning .viewer-slide img { cursor: grabbing; }
+
+  /* 뷰어 열렸을 때 배경 스크롤 잠금 */
+  body.no-scroll{ overflow:hidden; }
 </style>
 </head>
 <body>
@@ -97,7 +97,7 @@
       <div class="chip" aria-label="뒤로">←</div>
       <div class="title" id="pageTitle">뉴스</div>
       <div class="bar-right">
-        <a class="chip" aria-label="홈" href="https://www.khug.or.kr/index.jsp">🏠</a>
+        <div class="chip" aria-label="홈">🏠</div>
         <div class="chip" aria-label="메뉴">≡</div>
       </div>
     </div>
@@ -146,11 +146,9 @@
   </div>
 
 <script>
-/* ===== 포인터 감지 + 중복오픈 가드 ===== */
-const USE_POINTER = !!window.PointerEvent;   // PC 마우스도 포함
-let _lastOpenAt = 0; // openViewer 중복 호출 방지
-
-/* ===== 더미 본문 ===== */
+/* ================================
+   긴 더미 문장들 (랜덤 조합)
+================================ */
 const DUMMY_SENTENCES = [
   "전세보증금 반환을 둘러싼 분쟁이 이어지면서 임차인의 정보 비대칭 해소가 시급하다는 지적이 나온다.",
   "정부는 임대차 신고제 보완과 보증 보험 의무화 확대를 예고했지만 현장의 체감도는 여전히 낮다.",
@@ -173,8 +171,9 @@ const DUMMY_SENTENCES = [
   "임차인 보호를 위한 디지털 서류 검증이 확산되면서 계약 과정의 투명성이 과거보다 높아졌다는 평가도 있다.",
   "시장 참여자들은 금리와 공급, 정책 3요소가 동시에 완화되는 시점을 전환점으로 보고 관망세를 유지하는 분위기다."
 ];
+
 const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
-function makeParagraph(min=6,max=12){
+function makeParagraph(min=4,max=10){
   const count=randInt(min,max), used=new Set(), out=[];
   while(out.length<count){
     const i=randInt(0,DUMMY_SENTENCES.length-1);
@@ -184,7 +183,9 @@ function makeParagraph(min=6,max=12){
   return out.join(' ');
 }
 
-/* ===== 상태 ===== */
+/* ================================
+   상태/요소
+================================ */
 let currentType='news';
 const PAGE_SIZE=20, MAX_DOM_CARDS=120, EST_CARD_HEIGHT=470;
 let nextCursor=null, reachedEnd=false, loading=false;
@@ -197,11 +198,11 @@ const sentinel=document.getElementById('sentinel');
 const pageTitleEl  = document.getElementById('pageTitle');
 const viewerTitleEl= document.getElementById('viewerTitle');
 
-/* 제목/탭 */
+/* 제목 동기화 */
 function setTitleByType(type){
   const label = (type==='news')? '뉴스' : '홍보';
-  pageTitleEl.textContent = label;
-  viewerTitleEl.textContent = label;
+  if(pageTitleEl)  pageTitleEl.textContent = label;
+  if(viewerTitleEl)viewerTitleEl.textContent = label;
   document.title = `${label} – 무한스크롤·슬라이더·보기`;
 }
 function applyActiveTab(){
@@ -211,14 +212,20 @@ function applyActiveTab(){
     t.setAttribute('aria-selected', active ? 'true' : 'false');
   });
 }
+
+/* ================================
+   Tabs
+================================ */
 document.querySelectorAll('.tab').forEach(tab=>{
   tab.addEventListener('click',()=>{
     if(tab.classList.contains('is-active'))return;
     document.querySelectorAll('.tab').forEach(t=>{t.classList.remove('is-active');t.setAttribute('aria-selected','false');});
     tab.classList.add('is-active');tab.setAttribute('aria-selected','true');
     currentType=tab.dataset.type;
+
     setTitleByType(currentType);
     history.replaceState(null, '', `${location.pathname}?type=${currentType}`);
+
     nextCursor=null; reachedEnd=false; loading=false;
     topRemovedCount=0; topSpacerPx=0; topSpacer.style.height='0';
     listEl.innerHTML='';
@@ -226,9 +233,11 @@ document.querySelectorAll('.tab').forEach(tab=>{
   });
 });
 
-/* ===== Mock Fetch ===== */
+/* ================================
+   Fetch (mock) — 실제 서버로 교체 가능
+================================ */
 async function fetchPageFromServer(type,cursor,limit){
-  await new Promise(r=>setTimeout(r,200));
+  await new Promise(r=>setTimeout(r,250));
   const start=cursor?parseInt(cursor,10):0;
   const end=start+limit;
   const items=[];
@@ -236,7 +245,7 @@ async function fetchPageFromServer(type,cursor,limit){
     const id=`${type}-${i}`, seed=`${type}-${i}-${randInt(1,9999)}`;
     items.push({
       id,
-      title: makeParagraph(6,12),
+      title: makeParagraph(4,10),
       images:[
         `https://picsum.photos/seed/${seed}-1/560/700`,
         `https://picsum.photos/seed/${seed}-2/560/700`,
@@ -249,7 +258,9 @@ async function fetchPageFromServer(type,cursor,limit){
   return {items,nextCursor:end>=mockTotal?null:String(end)};
 }
 
-/* ===== Infinite + Virtual Scroll ===== */
+/* ================================
+   Infinite + Virtual Scroll
+================================ */
 async function loadNextPage(){
   if(loading||reachedEnd) return;
   loading=true;
@@ -274,50 +285,12 @@ function virtualTrimIfNeeded(){
   topSpacerPx+=removedHeight; topSpacer.style.height=topSpacerPx+'px';
   window.scrollBy(0,-removedHeight);
 }
-const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)loadNextPage();});},{root:null,rootMargin:'800px 0px 800px 0px'});
+const io=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting)loadNextPage();});},{root:null,rootMargin:'800px 0px 800px 0px'});
 io.observe(sentinel);
 
-/* ===== 공용 제스처 유틸 (Pointer 전용) ===== */
-function setupPointerSwipe(container, { onSwipeLeft, onSwipeRight, onTap, lockThreshold=10, swipeThreshold=45, enableWhen=()=>true }){
-  if(!window.PointerEvent) return null;
-  let sx=0, sy=0, dx=0, dy=0, lock=null, downTime=0, tracking=false, pointerId=null;
-
-  const onDown = (e)=>{
-    if(!enableWhen()) return;
-    if(e.target.closest('button') || e.target.closest('.mini-dots') || e.target.closest('.viewer-dots')) return;
-    tracking=true; pointerId=e.pointerId;
-    container.setPointerCapture?.(pointerId);
-    sx=e.clientX; sy=e.clientY; dx=0; dy=0; lock=null; downTime=Date.now();
-  };
-  const onMove = (e)=>{
-    if(!tracking) return;
-    dx=e.clientX-sx; dy=e.clientY-sy;
-    if(lock==null && (Math.abs(dx)>lockThreshold || Math.abs(dy)>lockThreshold)){
-      lock = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
-    }
-  };
-  const onUp = (e)=>{
-    if(!tracking) return;
-    const dt=Date.now()-downTime;
-    if(lock==='h' && Math.abs(dx)>swipeThreshold){
-      dx<0 ? onSwipeLeft?.() : onSwipeRight?.();
-    }else{
-      if(dt<300 && Math.abs(dx)<lockThreshold && Math.abs(dy)<lockThreshold){
-        onTap?.(e);
-      }
-    }
-    tracking=false; lock=null;
-    try{ container.releasePointerCapture?.(pointerId); }catch(_){}
-    pointerId=null;
-  };
-  container.addEventListener('pointerdown', onDown);
-  container.addEventListener('pointermove', onMove);
-  container.addEventListener('pointerup', onUp);
-  container.addEventListener('pointercancel', onUp);
-  return { destroy(){ container.removeEventListener('pointerdown',onDown); container.removeEventListener('pointermove',onMove); container.removeEventListener('pointerup',onUp); container.removeEventListener('pointercancel',onUp);} };
-}
-
-/* ===== 카드 컴포넌트 ===== */
+/* ================================
+   Card
+================================ */
 function buildCard(row){
   const card=document.createElement('article'); card.className='card';
   const imgs=row.images?.length?row.images:[placeholder()];
@@ -340,66 +313,56 @@ function buildCard(row){
   btn.addEventListener('click',()=>{const expanded=cap.classList.toggle('expanded');cap.setAttribute('aria-expanded',expanded);btn.textContent=expanded?'접기':'… 더보기';});
   cap.addEventListener('click',()=>btn.click());
   requestAnimationFrame(()=>{btn.hidden=!(cap.scrollHeight>cap.clientHeight+1);});
-  buildMiniSlider(card,imgs,{title:row.title,date:row.date});
+  //buildMiniSlider(card,imgs,{title:row.title,date:row.date});
+  buildMiniSlider(card, imgs, { title: row.title, date: row.date, shareUrl: '/news/' + row.id });
   return card;
 }
 
-/* ===== 메인 슬라이더 (컨테이너 바인딩 + 클릭 어디든 열기) ===== */
+/* ================================
+   Slider inside card (터치로 열기 + iOS 방향잠금/드래그 방지)
+================================ */
 function buildMiniSlider(card,srcs,meta){
   const slider=card.querySelector('.mini-slider');
   const slidesEl=card.querySelector('.mini-slides');
   const dotsEl=card.querySelector('.mini-dots');
   slidesEl.innerHTML=''; dotsEl.innerHTML='';
 
-  // 이미지 & 점 생성
   srcs.forEach((src,i)=>{
     const s=document.createElement('div'); s.className='mini-slide';
-    const img=new Image(); img.src=src; img.alt=`이미지 ${i+1}`; img.setAttribute('draggable','false');
-    s.appendChild(img); slidesEl.appendChild(s);
+    const img = new Image();
+    img.src = src;
+    img.alt = `이미지 ${i+1}`;
+    img.setAttribute('draggable','false');     /* iOS 드래그 방지 */
+    s.appendChild(img);
+    slidesEl.appendChild(s);
+
     const d=document.createElement('div'); d.className='mini-dot'; d.addEventListener('click',()=>goTo(slider,i)); dotsEl.appendChild(d);
   });
 
-  // 좌/우 버튼
   card.querySelector('.mini-prev').addEventListener('click',()=>goStep(slider,-1));
   card.querySelector('.mini-next').addEventListener('click',()=>goStep(slider,+1));
 
-  // Pointer(마우스/터치 공통): 컨테이너에 바인딩
-  if (USE_POINTER) {
-    setupPointerSwipe(slider,{
-      onSwipeLeft: ()=>goStep(slider,+1),
-      onSwipeRight:()=>goStep(slider,-1),
-      onTap:(e)=>{
-        if (e.target.closest('button') || e.target.closest('.mini-dots')) return;
-        openViewer(srcs, meta?.title||'', meta?.date||'');
-      },
-      lockThreshold: 10,
-      swipeThreshold: 45,
-      enableWhen: ()=> true
-    });
-  } else {
-    // 구형 터치 폴백
-    let sx=0, sy=0, dx=0, dy=0, t0=0, lock=null;
-    slider.addEventListener('touchstart', e=>{
-      const t=e.touches[0]; sx=t.clientX; sy=t.clientY; dx=0; dy=0; t0=Date.now(); lock=null;
-    }, {passive:true});
-    slider.addEventListener('touchmove', e=>{
-      if(!sx && !sy) return;
-      const t=e.touches[0]; dx=t.clientX-sx; dy=t.clientY-sy;
-      if(lock==null && (Math.abs(dx)>8 || Math.abs(dy)>8)) lock = Math.abs(dx)>Math.abs(dy) ? 'h':'v';
-      if(lock==='h' && e.cancelable) e.preventDefault();
-    }, {passive:false});
-    slider.addEventListener('touchend', e=>{
-      const dt=Date.now()-t0;
-      if(lock==='h' && Math.abs(dx)>40){ dx<0?goStep(slider,+1):goStep(slider,-1); }
-      else if(dt<300 && Math.abs(dx)<8 && Math.abs(dy)<8){ openViewer(srcs, meta?.title||'', meta?.date||''); }
-      sx=sy=dx=dy=0; lock=null;
-    }, {passive:true});
-  }
+  /* 터치 스와이프 + 방향 잠금 */
+  let startX=null, startY=null, swiped=false, hLock=false;
+  slidesEl.addEventListener('touchstart', e=>{
+    const t=e.touches[0]; startX=t.clientX; startY=t.clientY; swiped=false; hLock=false;
+  }, {passive:true});
+  slidesEl.addEventListener('touchmove', e=>{
+    if(startX==null) return;
+    const t=e.touches[0], dx=t.clientX-startX, dy=t.clientY-startY;
+    if(!hLock && (Math.abs(dx)>8 || Math.abs(dy)>8)){ hLock=Math.abs(dx)>Math.abs(dy); }
+    if(hLock && e.cancelable) e.preventDefault(); // 가로 제스처면 페이지 스크롤 억제
+  }, {passive:false});
+  slidesEl.addEventListener('touchend', e=>{
+    if(startX==null) return;
+    const dx=e.changedTouches[0].clientX-startX;
+    if(Math.abs(dx)>40){ swiped=true; dx<0?goStep(slider,+1):goStep(slider,-1); }
+    startX=startY=null;
+  }, {passive:true});
 
-  // 환경과 무관하게 ‘클릭’으로도 항상 열리게 (버튼/도트는 제외)
-  slider.addEventListener('click', (e)=>{
-    if (e.target.closest('button') || e.target.closest('.mini-dots')) return;
-    if (Date.now() - _lastOpenAt < 350) return; // onTap 직후 click 중복 방지
+  /* 탭/클릭 → 뷰어 열기 (스와이프 직후 합성 탭 무시) */
+  slidesEl.addEventListener('click', ()=>{
+    if(swiped){ swiped=false; return; }
     openViewer(srcs, meta?.title || '', meta?.date || '');
   });
 
@@ -420,7 +383,9 @@ function setIndex(slider,i){
 const goTo=(slider,i)=>setIndex(slider,i);
 const goStep=(slider,step)=>setIndex(slider,(+slider.dataset.index||0)+step);
 
-/* ===== Viewer ===== */
+/* ================================
+   Viewer (이미지 '탭'으로 닫기 + iOS 방향잠금 + 핀치줌/드래그 + 파일공유)
+================================ */
 const viewer      = document.getElementById('viewer');
 const backdrop    = document.getElementById('viewer-backdrop');
 const vSlidesEl   = document.getElementById('viewerSlides');
@@ -446,46 +411,91 @@ const Z_MIN = 1, Z_MAX = 4;
 let pinchStartDist = 0, pinchStartScale = 1;
 let panStartX = 0, panStartY = 0, panStartTx = 0, panStartTy = 0;
 let isPanning = false, isPinching = false;
-/* 탭 방지 */
+
+/* 탭 감지용 */
+let tapStartX=0, tapStartY=0, tapStartTime=0;
+
+/* 스와이프 방향잠금 */
+let swipeStartX=null, swipeStartY=null, swipeLock=null;
+
+/* 스와이프/핀치 직후 합성 탭 방지 */
 let suppressTapClose = false;
 function blockTapCloseBrief(){ suppressTapClose = true; setTimeout(()=>{ suppressTapClose = false; }, 250); }
 
 function viewerImgEl(){ const slide = vSlidesEl.children[vIdx]; return slide ? slide.querySelector('img') : null; }
-function resetZoom(){ zScale=1; zTx=0; zTy=0; const img=viewerImgEl(); if(img) img.style.transform=`translate(0px,0px) scale(1)`; vSliderBox.classList.remove('is-zoomed','is-panning'); }
-function applyZoom(){ const img=viewerImgEl(); if(!img) return; img.style.transform=`translate(${zTx}px,${zTy}px) scale(${zScale})`; if(zScale>1) vSliderBox.classList.add('is-zoomed'); else vSliderBox.classList.remove('is-zoomed','is-panning'); }
-function clampPan(){ const boxW=vSliderBox.clientWidth, boxH=vSliderBox.clientHeight; const maxX=(boxW*(zScale-1))/2, maxY=(boxH*(zScale-1))/2; zTx=Math.max(-maxX,Math.min(maxX,zTx)); zTy=Math.max(-maxY,Math.min(maxY,zTy)); }
+function resetZoom(){
+  zScale = 1; zTx = 0; zTy = 0;
+  const img = viewerImgEl(); if(!img) return;
+  img.style.transform = `translate(0px,0px) scale(1)`;
+  vSliderBox.classList.remove('is-zoomed','is-panning');
+}
+function applyZoom(){
+  const img = viewerImgEl(); if(!img) return;
+  img.style.transform = `translate(${zTx}px,${zTy}px) scale(${zScale})`;
+  if (zScale > 1) vSliderBox.classList.add('is-zoomed');
+  else vSliderBox.classList.remove('is-zoomed','is-panning');
+}
+function clampPan(){
+  const boxW = vSliderBox.clientWidth;
+  const boxH = vSliderBox.clientHeight;
+  const maxX = (boxW * (zScale - 1)) / 2;
+  const maxY = (boxH * (zScale - 1)) / 2;
+  zTx = Math.max(-maxX, Math.min(maxX, zTx));
+  zTy = Math.max(-maxY, Math.min(maxY, zTy));
+}
 
 function openViewer(imgs, caption, date){
-  if (Date.now() - _lastOpenAt < 350) return; // 중복 오픈 가드
-  _lastOpenAt = Date.now();
+  vSlidesEl.innerHTML = '';
+  vDotsEl.innerHTML = '';
+  imgs.forEach((src, i)=>{
+    const s = document.createElement('div');
+    s.className = 'viewer-slide';
+    const img = new Image();
+    img.src = src; img.alt = `이미지 ${i+1}`;
+    img.setAttribute('draggable','false'); /* iOS 드래그 방지 */
+    s.appendChild(img);
+    vSlidesEl.appendChild(s);
 
-  vSlidesEl.innerHTML=''; vDotsEl.innerHTML='';
-  imgs.forEach((src,i)=>{
-    const s=document.createElement('div'); s.className='viewer-slide';
-    const img=new Image(); img.src=src; img.alt=`이미지 ${i+1}`; img.setAttribute('draggable','false');
-    s.appendChild(img); vSlidesEl.appendChild(s);
-    const d=document.createElement('div'); d.className='viewer-dot'; d.addEventListener('click', (e)=>{ e.stopPropagation(); viewerGoTo(i); }); vDotsEl.appendChild(d);
+    const d = document.createElement('div');
+    d.className = 'viewer-dot';
+    d.addEventListener('click', (e)=>{ e.stopPropagation(); viewerGoTo(i); });
+    vDotsEl.appendChild(d);
   });
-  vCaptionEl.textContent = caption||''; vDateEl.textContent = date||'';
-  vIdx=0; viewerUpdate(); resetZoom();
 
-  viewer.style.display='block'; backdrop.style.display='block';
+  vCaptionEl.textContent = caption || '';
+  vDateEl.textContent = date || '';
+  vIdx = 0; viewerUpdate();
+  resetZoom();
+
+  viewer.style.display='block';
+  backdrop.style.display='block';
   viewer.setAttribute('aria-hidden','false');
   document.addEventListener('keydown', escCloseOnce);
-  document.body.classList.add('no-scroll');
-  stopAutoplay();
+  document.body.classList.add('no-scroll');   // 배경 스크롤 잠금
+
+  stopAutoplay(); // 기본 정지
 }
 function closeViewer(){
   stopAutoplay();
-  viewer.style.display='none'; backdrop.style.display='none';
+  viewer.style.display='none';
+  backdrop.style.display='none';
   viewer.setAttribute('aria-hidden','true');
   document.removeEventListener('keydown', escCloseOnce);
-  document.body.classList.remove('no-scroll');
+  document.body.classList.remove('no-scroll'); // 잠금 해제
 }
-function escCloseOnce(e){ if(e.key==='Escape') closeViewer(); if(e.key==='ArrowLeft') viewerStep(-1); if(e.key==='ArrowRight') viewerStep(+1); }
+function escCloseOnce(e){ 
+  if(e.key==='Escape') closeViewer(); 
+  if(e.key==='ArrowLeft') viewerStep(-1);
+  if(e.key==='ArrowRight') viewerStep(+1);
+}
 
-function viewerGoTo(i){ const total=vSlidesEl.children.length; vIdx=Math.max(0,Math.min(total-1,i)); viewerUpdate(); resetZoom(); }
-function viewerStep(step){ viewerGoTo(vIdx+step); }
+function viewerGoTo(i){
+  const total = vSlidesEl.children.length;
+  vIdx = Math.max(0, Math.min(total-1, i));
+  viewerUpdate();
+  resetZoom();
+}
+function viewerStep(step){ viewerGoTo(vIdx + step); }
 function viewerUpdate(){
   vSlidesEl.style.transform = `translateX(${-vIdx*100}%)`;
   [...vDotsEl.children].forEach((d,i)=> d.classList.toggle('active', i===vIdx));
@@ -495,95 +505,187 @@ function viewerUpdate(){
 }
 
 /* Autoplay */
-function startAutoplay(){ if(isAutoplaying) return; isAutoplaying=true; vPlayBtn.textContent='일시정지';
-  autoplayTimer=setInterval(()=>{ const total=vSlidesEl.children.length; if(vIdx>=total-1) viewerGoTo(0); else viewerStep(+1); }, AUTOPLAY_MS); }
-function stopAutoplay(){ isAutoplaying=false; vPlayBtn.textContent='재생'; if(autoplayTimer){clearInterval(autoplayTimer); autoplayTimer=null;} }
-
-/* Share (파일 공유 우선) */
-async function shareCurrent(){
-  const img=viewerImgEl(); if(!img) return;
-  const title=(pageTitleEl?.textContent||'뉴스&홍보'); const text=vCaptionEl.textContent||'';
-  const prev=vShareBtn.textContent; vShareBtn.disabled=true; vShareBtn.textContent='공유 준비 중…';
-  try{
-    const res=await fetch(img.src,{mode:'cors',cache:'no-store'}); const blob=await res.blob();
-    const mime=blob.type||'image/jpeg'; const ext=(mime.split('/')[1]||'jpg').replace('jpeg','jpg'); const file=new File([blob],`image.${ext}`,{type:mime});
-    if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({title,text,files:[file]}); }
-    else if(navigator.share){ await navigator.share({title,text,url:img.src}); }
-    else if(navigator.clipboard && window.ClipboardItem){ try{ await navigator.clipboard.write([ new ClipboardItem({[mime]:blob}) ]); alert('이미지가 클립보드에 복사되었습니다.'); }catch(e){ await navigator.clipboard.writeText(`${text}\n${img.src}`); alert('링크가 복사되었습니다.'); } }
-    else { const a=document.createElement('a'); a.href=img.src; a.download=`image.${ext}`; document.body.appendChild(a); a.click(); a.remove(); }
-  }catch(e){
-    try{ await navigator.clipboard.writeText(img.src); alert('이미지 링크가 클립보드에 복사되었습니다.'); }catch(_){ prompt('아래 링크를 복사하세요:', img.src); }
-  }finally{ vShareBtn.disabled=false; vShareBtn.textContent=prev; }
+function startAutoplay(){
+  if (isAutoplaying) return;
+  isAutoplaying = true;
+  vPlayBtn.textContent = '일시정지';
+  autoplayTimer = setInterval(()=>{
+    const total = vSlidesEl.children.length;
+    if (vIdx >= total-1) viewerGoTo(0);
+    else viewerStep(+1);
+  }, AUTOPLAY_MS);
+}
+function stopAutoplay(){
+  isAutoplaying = false;
+  vPlayBtn.textContent = '재생';
+  if (autoplayTimer) { clearInterval(autoplayTimer); autoplayTimer = null; }
 }
 
-/* 컨트롤 이벤트 (전파 차단) */
-[vPrevBtn, vNextBtn, vCloseBtn, vListBtn, vShareBtn, vPlayBtn].forEach(btn=>btn.addEventListener('click', e=>e.stopPropagation()));
+/* Share: 현재 슬라이드 이미지를 파일로 공유(가능하면) */
+async function shareCurrent(){
+  const img = viewerImgEl();
+  if (!img) return;
+
+  const title    = (pageTitleEl?.textContent || '뉴스&홍보');
+  const caption  = vCaptionEl.textContent || '';
+  const shareUrl = location.href;   // ← 원하면 여기 원하는 상세페이지 URL로 교체
+  const imageUrl = img.src;
+
+  const prev = vShareBtn.textContent;
+  vShareBtn.disabled = true;
+  vShareBtn.textContent = '공유 준비 중…';
+
+  try{
+    // 이미지 파일 준비 (가능하면 파일+URL 동시 공유)
+    let file = null;
+    try{
+      const res  = await fetch(imageUrl, { mode: 'cors', cache: 'no-store' });
+      const blob = await res.blob();
+      const mime = blob.type || 'image/jpeg';
+      const ext  = (mime.split('/')[1] || 'jpg').replace('jpeg','jpg');
+      file = new File([blob], `image.${ext}`, { type: mime });
+    }catch(_){}
+
+    // 1) 파일 + URL 동시 공유 (지원되는 경우)
+    if (file && navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+      await navigator.share({
+        title,
+        text: `${caption}\n${shareUrl}\n${imageUrl}`, // 일부 앱에서 url 무시 대비
+        url:  shareUrl,
+        files:[file],
+      });
+      return;
+    }
+
+    // 2) 파일 공유 미지원 → URL + 텍스트만 공유
+    if (navigator.share) {
+      await navigator.share({
+        title,
+        text: `${caption}\n${shareUrl}\n${imageUrl}`,
+        url:  shareUrl,
+      });
+      return;
+    }
+
+    // 3) Web Share 미지원 → 클립보드/다운로드 폴백
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(`${caption}\n${shareUrl}\n${imageUrl}`);
+      alert('링크가 클립보드에 복사되었습니다.');
+    } else {
+      const a=document.createElement('a'); a.href=imageUrl; a.download='image.jpg';
+      document.body.appendChild(a); a.click(); a.remove();
+      alert('공유를 지원하지 않아 이미지를 다운로드했습니다.\nURL: ' + shareUrl);
+    }
+  }catch(err){
+    console.error('share error:', err);
+    try{
+      await navigator.clipboard.writeText(`${caption}\n${shareUrl}\n${imageUrl}`);
+      alert('링크가 클립보드에 복사되었습니다.');
+    }catch(_){}
+  } finally{
+    vShareBtn.disabled = false;
+    vShareBtn.textContent = prev;
+  }
+}
+
+
+/* ---- 터치 제스처 (하나로 통합: 방향잠금 + 탭 닫기 + 스와이프 + 핀치/팬) ---- */
+vSlidesEl.addEventListener('touchstart', (e)=>{
+  if(e.touches.length===2){
+    // Pinch 시작
+    isPinching = true; isPanning=false;
+    const [a,b]=e.touches;
+    pinchStartDist = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+    pinchStartScale = zScale;
+    return;
+  }
+  // 1손가락
+  const t = e.touches[0];
+  tapStartX=t.clientX; tapStartY=t.clientY; tapStartTime=Date.now();
+  if (zScale>1){
+    // 확대 중 팬 준비
+    isPanning=true; isPinching=false;
+    panStartX=t.clientX; panStartY=t.clientY;
+    panStartTx=zTx; panStartTy=zTy;
+    vSliderBox.classList.add('is-panning');
+  }else{
+    // 슬라이드 스와이프/탭 후보
+    swipeStartX=t.clientX; swipeStartY=t.clientY; swipeLock=null;
+  }
+},{passive:true});
+
+vSlidesEl.addEventListener('touchmove', (e)=>{
+  // Pinch
+  if (isPinching && e.touches.length===2){
+    if (e.cancelable) e.preventDefault();
+    const [a,b]=e.touches;
+    const dist = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+    zScale = Math.max(Z_MIN, Math.min(Z_MAX, (dist/pinchStartDist) * pinchStartScale));
+    clampPan(); applyZoom();
+    return;
+  }
+  // Pan
+  if (isPanning && e.touches.length===1){
+    if (e.cancelable) e.preventDefault();
+    const t=e.touches[0];
+    zTx = panStartTx + (t.clientX - panStartX);
+    zTy = panStartTy + (t.clientY - panStartY);
+    clampPan(); applyZoom();
+    return;
+  }
+  // Swipe (zScale===1)
+  if (swipeStartX!=null && e.touches.length===1){
+    const t=e.touches[0];
+    const dx=t.clientX - swipeStartX;
+    const dy=t.clientY - swipeStartY;
+    if(swipeLock==null && (Math.abs(dx)>8 || Math.abs(dy)>8)){
+      swipeLock = Math.abs(dx)>Math.abs(dy) ? 'h':'v';
+    }
+    if(swipeLock==='h' && e.cancelable) e.preventDefault(); // 가로일 때만 기본 스크롤 억제
+  }
+},{passive:false});
+
+vSlidesEl.addEventListener('touchend', (e)=>{
+  // Pinch/Pan 종료
+  if (isPinching || isPanning){
+    isPinching=false; isPanning=false; vSliderBox.classList.remove('is-panning');
+    blockTapCloseBrief(); // 합성 탭 방지
+    return;
+  }
+  // Swipe or Tap (zScale===1)
+  const dx=(e.changedTouches[0].clientX - (swipeStartX??e.changedTouches[0].clientX));
+  const dy=(e.changedTouches[0].clientY - (swipeStartY??e.changedTouches[0].clientY));
+  const dt=Date.now()-tapStartTime;
+
+  // 스와이프
+  if (swipeLock==='h' && Math.abs(dx)>40){
+    dx<0 ? viewerStep(+1) : viewerStep(-1);
+    blockTapCloseBrief();
+  } else {
+    // 탭 판정 (이동 거의 없음 + 짧은 시간)
+    const isTap = Math.abs(dx)<8 && Math.abs(dy)<8 && dt<300;
+    const isImg = e.target && e.target.tagName==='IMG';
+    if (isTap && isImg && !suppressTapClose){
+      closeViewer();
+    }
+  }
+  swipeStartX=swipeStartY=swipeLock=null;
+},{passive:true});
+
+/* 배경/시트 터치는 닫힘 안 됨 (이미지 탭만 닫힘 유지) */
+backdrop.addEventListener('click', (e)=>{ e.stopPropagation(); });
+viewer.addEventListener('click', (e)=>{ e.stopPropagation(); });
+
+/* 컨트롤 클릭은 전파만 막고 동작 */
+[vPrevBtn, vNextBtn, vCloseBtn, vListBtn, vShareBtn, vPlayBtn].forEach(btn=>{
+  btn.addEventListener('click', (e)=>{ e.stopPropagation(); });
+});
 vPrevBtn.addEventListener('click', ()=> viewerStep(-1));
 vNextBtn.addEventListener('click', ()=> viewerStep(+1));
 vCloseBtn.addEventListener('click', closeViewer);
 vListBtn .addEventListener('click', closeViewer);
 vShareBtn.addEventListener('click', shareCurrent);
 vPlayBtn .addEventListener('click', ()=>{ isAutoplaying ? stopAutoplay() : startAutoplay(); });
-
-/* Viewer: Pointer 스와이프 + 이미지/텍스트 탭 닫기 (확대 중에도) */
-if (USE_POINTER) {
-  setupPointerSwipe(vSliderBox,{
-    onSwipeLeft: ()=>{ if(zScale===1) viewerStep(+1); },
-    onSwipeRight:()=>{ if(zScale===1) viewerStep(-1); },
-    onTap:(e)=>{
-      if (suppressTapClose) return;
-      const isImg  = !!e.target.closest('.viewer-slide img');
-      const isText = !!e.target.closest('#viewerCaption, #viewerDate');
-      if (isImg || isText) closeViewer();
-    },
-    enableWhen:()=>true
-  });
-}
-
-/* Viewer: 핀치줌/팬 (touch) */
-vSlidesEl.addEventListener('touchstart', (e)=>{
-  if(e.touches.length===2){
-    isPinching=true; isPanning=false;
-    const [a,b]=e.touches; pinchStartDist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY); pinchStartScale=zScale; stopAutoplay();
-  } else if(e.touches.length===1 && zScale>1){
-    isPanning=true; isPinching=false;
-    const t=e.touches[0]; panStartX=t.clientX; panStartY=t.clientY; panStartTx=zTx; panStartTy=zTy; vSliderBox.classList.add('is-panning'); stopAutoplay();
-  }
-},{passive:false});
-vSlidesEl.addEventListener('touchmove', (e)=>{
-  if(isPinching && e.touches.length===2){
-    if(e.cancelable) e.preventDefault();
-    const [a,b]=e.touches; const dist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
-    zScale=Math.max(Z_MIN,Math.min(Z_MAX,(dist/pinchStartDist)*pinchStartScale)); clampPan(); applyZoom();
-  } else if(isPanning && e.touches.length===1){
-    if(e.cancelable) e.preventDefault();
-    const t=e.touches[0]; zTx=panStartTx+(t.clientX-panStartX); zTy=panStartTy+(t.clientY-panStartY); clampPan(); applyZoom();
-  }
-},{passive:false});
-vSlidesEl.addEventListener('touchend', ()=>{
-  if(isPinching || isPanning){ isPinching=false; isPanning=false; vSliderBox.classList.remove('is-panning'); blockTapCloseBrief(); }
-},{passive:true});
-
-/* 배경/시트 탭은 닫힘 없음(요청대로 유지) */
-backdrop.addEventListener('click', e=>e.stopPropagation());
-
-/* ✅ 델리게이션: 팝업 안에서 이미지/캡션/날짜 클릭 시 닫기 (PC/모바일 공통) */
-viewer.addEventListener('click', (e)=>{
-  // 컨트롤/도트 클릭은 무시
-  if (e.target.closest('#viewerPrev, #viewerNext, #viewerCloseBtn, #viewerListBtn, #viewerShareBtn, #viewerPlayBtn, .viewer-dots')) return;
-
-  const hitImg  = e.target.closest('.viewer-slide img');
-  const hitText = e.target.closest('#viewerCaption, #viewerDate');
-  if ((hitImg || hitText) && !suppressTapClose) {
-    closeViewer();
-  }
-});
-
-/* ✔ 이미지 ‘클릭’ 폴백(보강) */
-vSlidesEl.addEventListener('click', (e)=>{
-  if (suppressTapClose) return;
-  if (e.target.closest('.viewer-slide img')) closeViewer();
-});
 
 /* Helper */
 function placeholder(){
@@ -595,7 +697,7 @@ function placeholder(){
   );
 }
 
-/* 초기 로드 */
+/* 초기 로드: URL ?type=... 처리 + 제목/탭 동기화 */
 {
   const urlType = new URLSearchParams(location.search).get('type');
   if (urlType === 'news' || urlType === 'pr') currentType = urlType;
