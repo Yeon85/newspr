@@ -624,13 +624,15 @@ vSlidesEl.addEventListener('touchstart', (e)=>{
   }
 },{passive:true});
 
+
+/* ---- 터치 제스처 (하나로 통합: 방향잠금 + 탭 닫기 + 스와이프 + 핀치/팬) ---- */
 vSlidesEl.addEventListener('touchmove', (e)=>{
   // Pinch
   if (isPinching && e.touches.length===2){
     if (e.cancelable) e.preventDefault();
     const [a,b]=e.touches;
     const dist = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
-    zScale = Math.max(Z_MIN, Math.min(Z_MAX, (dist/pinschStartDist) * pinchStartScale));
+    zScale = Math.max(Z_MIN, Math.min(Z_MAX, (dist/pinchStartDist) * pinchStartScale));
     clampPan(); applyZoom();
     return;
   }
