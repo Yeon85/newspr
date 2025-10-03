@@ -243,7 +243,7 @@ async function fetchPageFromServer(type,cursor,limit){
   const items=[];
   for(let i=start;i<end;i++){
     const id=`${type}-${i}`, seed=`${type}-${i}-${randInt(1,9999)}`;
-    const imgCount = 3; // 최대 10장까지 바꿔도 됨
+    const imgCount = 3; // 최대 10장까지 확장 가능
     const images=[];
     for(let k=1;k<=imgCount;k++){
       images.push(`https://picsum.photos/seed/${seed}-${k}/560/700`);
@@ -379,7 +379,7 @@ const goTo=(slider,i)=>setIndex(slider,i);
 const goStep=(slider,step)=>setIndex(slider,(+slider.dataset.index||0)+step);
 
 /* ================================
-   Viewer (닫기 버튼으로만 닫힘) + 공유 + 자동재생 + 핀치줌 + TTS
+   Viewer (닫기 버튼으로만 닫힘) + 공유 + 자동재생 + 핀치줌 + TTS(끊김없이)
 ================================ */
 const viewer      = document.getElementById('viewer');
 const backdrop    = document.getElementById('viewer-backdrop');
@@ -401,9 +401,11 @@ let autoplayTimer = null;
 const AUTOPLAY_MS = 3000;
 let isAutoplaying = false;
 
-/* ===== TTS(글자 읽기) ===== */
+/* ===== TTS(글자 읽기) — 끊김 없이 이어읽기 ===== */
 let ttsEnabled = false;
 let ttsVoice = null;
+let ttsUtter = null;      // 현재 발화
+let ttsNextText = null;   // 다음에 읽을 최신 문장
 
 function pickKoVoice(){
   if (!('speechSynthesis' in window)) return;
@@ -424,17 +426,32 @@ function composeCaptionForTTS(){
   return [date, cap, `${n}번째 이미지, 총 ${total}장 중.`].filter(Boolean).join(' ');
 }
 function ttsSpeak(text){
-  if (!('speechSynthesis' in window)) { alert('이 브라우저는 음성합성을 지원하지 않습니다.'); return; }
+  if (!('speechSynthesis' in window)) return;
   if (!text) return;
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  if (ttsVoice) u.voice = ttsVoice;
-  u.lang  = ttsVoice?.lang || 'ko-KR';
-  u.rate  = 1.0;
-  u.pitch = 1.0;
-  speechSynthesis.speak(u);
+
+  try { speechSynthesis.cancel(); } catch(_) {}
+
+  ttsUtter = new SpeechSynthesisUtterance(text);
+  if (ttsVoice) ttsUtter.voice = ttsVoice;
+  ttsUtter.lang  = ttsVoice?.lang || 'ko-KR';
+  ttsUtter.rate  = 1.0;
+  ttsUtter.pitch = 1.0;
+
+  // 자연 종료 후 최신 큐가 있으면 이어서 읽기
+  ttsUtter.onend = () => {
+    if (!ttsEnabled) return;
+    const next = ttsNextText;
+    ttsNextText = null;
+    if (next) ttsSpeak(next);
+  };
+
+  speechSynthesis.speak(ttsUtter);
 }
-function ttsStop(){ try{ speechSynthesis.cancel(); }catch(_){ } }
+function ttsStop(){
+  try { speechSynthesis.cancel(); } catch(_){}
+  ttsUtter = null;
+  ttsNextText = null;
+}
 
 /* Zoom/Pan state */
 let zScale = 1, zTx = 0, zTy = 0;
@@ -446,13 +463,13 @@ let isPanning = false, isPinching = false;
 let suppressTapClose = false;
 function blockTapCloseBrief(){ suppressTapClose = true; setTimeout(()=>{ suppressTapClose = false; }, 250); }
 
+/* 로딩 스피너 on/off */
+function showSpinner(on){ vSpinner.style.display = on ? 'flex' : 'none'; }
+
 function viewerImgEl(){ const slide = vSlidesEl.children[vIdx]; return slide ? slide.querySelector('img') : null; }
 function resetZoom(){ zScale=1; zTx=0; zTy=0; const img=viewerImgEl(); if(img) img.style.transform=`translate(0px,0px) scale(1)`; vSliderBox.classList.remove('is-zoomed','is-panning'); }
 function applyZoom(){ const img=viewerImgEl(); if(!img) return; img.style.transform=`translate(${zTx}px,${zTy}px) scale(${zScale})`; if(zScale>1) vSliderBox.classList.add('is-zoomed'); else vSliderBox.classList.remove('is-zoomed','is-panning'); }
 function clampPan(){ const boxW=vSliderBox.clientWidth, boxH=vSliderBox.clientHeight; const maxX=(boxW*(zScale-1))/2, maxY=(boxH*(zScale-1))/2; zTx=Math.max(-maxX,Math.min(maxX,zTx)); zTy=Math.max(-maxY,Math.min(maxY,zTy)); }
-
-/* 로딩 스피너 on/off */
-function showSpinner(on){ vSpinner.style.display = on ? 'flex' : 'none'; }
 
 function openViewer(imgs, caption, date){
   vSlidesEl.innerHTML=''; vDotsEl.innerHTML='';
@@ -498,7 +515,10 @@ function viewerUpdate(){
   const total = vSlidesEl.children.length;
   vNextBtn.disabled = (vIdx===total-1);
 
-  //if (ttsEnabled){ ttsStop(); ttsSpeak(composeCaptionForTTS()); }
+  // 🔊 읽는 중이면 끊지 말고 다음 텍스트만 업데이트
+  if (ttsEnabled){
+    ttsNextText = composeCaptionForTTS();
+  }
 }
 
 /* Autoplay */
@@ -523,16 +543,16 @@ async function shareCurrent(){
       file=new File([blob],`image.${ext}`,{type:mime});
     }catch(_){}
 
-    // 1) 파일+텍스트+URL (플랫폼 따라 URL가 무시될 수 있음)
+    // 1) 파일+텍스트+URL (플랫폼에 따라 URL은 무시될 수 있음)
     if(file && navigator.canShare && navigator.canShare({files:[file]})){
       try{ await navigator.share({ title, text, url: pageUrl, files:[file] }); vShareBtn.disabled=false; vShareBtn.textContent=prev; return; }catch(e){}
     }
-    // 2) 텍스트+URL만
+    // 2) 텍스트+URL
     if(navigator.share){
       await navigator.share({ title, text, url: pageUrl });
       vShareBtn.disabled=false; vShareBtn.textContent=prev; return;
     }
-    // 3) 클립보드 복사 폴백
+    // 3) 폴백: 클립보드
     if(navigator.clipboard){
       await navigator.clipboard.writeText(`${text}\n${imgUrl}`);
       alert('텍스트와 링크가 클립보드에 복사되었습니다.');
@@ -557,7 +577,6 @@ async function shareCurrent(){
 [vPrevBtn, vNextBtn, vListBtn, vShareBtn, vPlayBtn].forEach(btn=>btn.addEventListener('click', e=>e.stopPropagation()));
 vPrevBtn.addEventListener('click', ()=> viewerStep(-1));
 vNextBtn.addEventListener('click', ()=> viewerStep(+1));
-vListBtn .addEventListener('click', closeViewer);
 vShareBtn.addEventListener('click', shareCurrent);
 vPlayBtn .addEventListener('click', ()=>{
   if (isAutoplaying){
@@ -568,11 +587,14 @@ vPlayBtn .addEventListener('click', ()=>{
   }
   // 시작: 자동 슬라이드 + 읽어주기 ON
   ttsEnabled = true;
-  //startAutoplay();
+  startAutoplay();
+
+  // 처음 한 번만 현재 슬라이드 읽기 시작
+  ttsStop();
   ttsSpeak(composeCaptionForTTS());
 });
 vCloseBtn.addEventListener('click', closeViewer);       // ← 닫기 버튼만 닫힘
-// 배경/시트 클릭, ESC 등은 닫히지 않도록 핸들러 미등록
+vListBtn.addEventListener('click', closeViewer);         // 목록도 닫기만 수행(원하면 위치 스크롤 추가 가능)
 
 /* Viewer: 슬라이드 스와이프(확대 안했을 때) */
 let vStartX=null, vStartY=null, vHLock=false;
