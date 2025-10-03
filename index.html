@@ -527,7 +527,9 @@ async function shareCurrent(){
 
   const title = (pageTitleEl?.textContent || '뉴스&홍보');
   const text  = vCaptionEl.textContent || '';
-
+const shareUrl = location.href;   // ← 원하면 여기 원하는 상세페이지 URL로 교체
+  const imageUrl = img.src;
+  
   const prevTxt = vShareBtn.textContent;
   vShareBtn.disabled = true;
   vShareBtn.textContent = '공유 준비 중…';
@@ -555,27 +557,45 @@ async function shareCurrent(){
         return;
       }catch(e){}
     }
-    // 최종 폴백
+    // 1) 파일 + URL 동시 공유 (지원되는 경우)
+    if (file && navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+      await navigator.share({
+        title,
+        text: `${caption}\n${shareUrl}\n${imageUrl}`, // 일부 앱에서 url 무시 대비
+        url:  shareUrl,
+        files:[file],
+      });
+      return;
+    }
+
+    // 2) 파일 공유 미지원 → URL + 텍스트만 공유
+    if (navigator.share) {
+      await navigator.share({
+        title,
+        text: `${caption}\n${shareUrl}\n${imageUrl}`,
+        url:  shareUrl,
+      });
+      return;
+    }
+
+    // 3) Web Share 미지원 → 클립보드/다운로드 폴백
     if (navigator.clipboard) {
-      await navigator.clipboard.writeText(`${text}\n${img.src}`);
+      await navigator.clipboard.writeText(`${caption}\n${shareUrl}\n${imageUrl}`);
       alert('링크가 클립보드에 복사되었습니다.');
     } else {
-      const a=document.createElement('a'); a.href=img.src; a.download=`image.${ext}`;
+      const a=document.createElement('a'); a.href=imageUrl; a.download='image.jpg';
       document.body.appendChild(a); a.click(); a.remove();
+      alert('공유를 지원하지 않아 이미지를 다운로드했습니다.\nURL: ' + shareUrl);
     }
   }catch(err){
     console.error('share error:', err);
     try{
-      if (navigator.clipboard) {
-        await navigator.clipboard.writeText(img.src);
-        alert('이미지 링크가 클립보드에 복사되었습니다.');
-      } else {
-        prompt('아래 링크를 복사하세요:', img.src);
-      }
+      await navigator.clipboard.writeText(`${caption}\n${shareUrl}\n${imageUrl}`);
+      alert('링크가 클립보드에 복사되었습니다.');
     }catch(_){}
   } finally{
     vShareBtn.disabled = false;
-    vShareBtn.textContent = prevTxt;
+    vShareBtn.textContent = prev;
   }
 }
 
@@ -610,7 +630,7 @@ vSlidesEl.addEventListener('touchmove', (e)=>{
     if (e.cancelable) e.preventDefault();
     const [a,b]=e.touches;
     const dist = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
-    zScale = Math.max(Z_MIN, Math.min(Z_MAX, (dist/pinchStartDist) * pinchStartScale));
+    zScale = Math.max(Z_MIN, Math.min(Z_MAX, (dist/pinschStartDist) * pinchStartScale));
     clampPan(); applyZoom();
     return;
   }
