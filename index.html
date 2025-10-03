@@ -157,10 +157,7 @@ const USE_POINTER = !!window.PointerEvent;
 
 /* 고스트 클릭/중복 오픈/즉시 닫힘 가드 */
 const OPEN_GUARD_MS  = 350;
-const CLOSE_GUARD_MS = 250;
-let lastOpenTs  = 0;
-let lastCloseTs = 0;
-
+let lastOpenTs  = 0, lastCloseTs = 0;
 function canOpenNow(){
   const now = Date.now();
   return (now - lastOpenTs > OPEN_GUARD_MS) && (now - lastCloseTs > 120);
@@ -168,7 +165,6 @@ function canOpenNow(){
 function noteClosed(){ lastCloseTs = Date.now(); }
 function justOpenedShield(){
   lastOpenTs = Date.now();
-  // Android의 합성 클릭 한번 흡수
   const swallow=(ev)=>{ ev.stopPropagation(); ev.preventDefault(); cleanup(); };
   const cleanup = ()=> document.removeEventListener('click', swallow, true);
   document.addEventListener('click', swallow, true);
@@ -313,29 +309,25 @@ const io=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersect
 io.observe(sentinel);
 
 /* ================================
-   공용 포인터 스와이프 유틸
+   공용 포인터 스와이프 유틸 (수직 스크롤 시 탭 무효 + 에지 뒤로가기)
 ================================ */
-/* === drop-in replacement: setupPointerSwipe ===
-   - 수평/수직 잠금
-   - 세로 스크롤 발생 시 탭 무효
-   - 수평으로 확정된 뒤에만 setPointerCapture
-*/
 function setupPointerSwipe(
   container,
   {
     onSwipeLeft,
     onSwipeRight,
     onTap,
-    // 값은 상황에 맞게 살짝 조절 가능
-    lockThreshold = 12,     // 제스처 방향 결정 임계치(px)
-    swipeThreshold = 55,    // 스와이프 임계치(px)
-    tapMoveTolerance = 6,   // 탭으로 인정하는 이동 허용치(px)
-    tapTime = 320,          // 탭으로 인정하는 시간(ms)
-    scrollTolerance = 4,    // 탭 동안 허용되는 실제 스크롤 변화(px)
+    onBack,                // ← 좌측 에지 스와이프 백 핸들러
+    lockThreshold = 12,    // 방향 결정 임계치
+    swipeThreshold = 55,   // 스와이프 임계치
+    tapMoveTolerance = 6,  // 탭 허용 이동
+    tapTime = 320,         // 탭 허용 시간
+    scrollTolerance = 4,   // 탭 동안 허용 스크롤 변화
+    edgeBackWidth = 24,    // 좌측 에지 영역(px)
     enableWhen = () => true
   } = {}
 ){
-  if (!window.PointerEvent) return null;
+  if (!USE_POINTER) return null;
 
   let sx=0, sy=0, dx=0, dy=0;
   let lock = null;          // 'h' | 'v' | null
@@ -357,25 +349,22 @@ function setupPointerSwipe(
 
     tracking = true;
     pid = e.pointerId;
-    captured = false;      // ❗ 아직은 캡처 금지 (수평 확정 후에만)
-    sx = e.clientX;
-    sy = e.clientY;
-    dx = dy = 0;
-    lock = null;
+    captured = false;      // 수평 확정 전에는 캡처 금지
+    sx = e.clientX; sy = e.clientY;
+    dx = dy = 0; lock = null;
     t0 = Date.now();
     startScrollY = getScrollTop();
   };
 
   const onMove = (e)=>{
     if (!tracking) return;
-    dx = e.clientX - sx;
-    dy = e.clientY - sy;
+    dx = e.clientX - sx; dy = e.clientY - sy;
 
     // 방향 잠금 결정
     if (lock == null && (Math.abs(dx) > lockThreshold || Math.abs(dy) > lockThreshold)) {
       lock = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
 
-      // 수평으로 확정된 후에만 capture → 세로 스크롤 방해 안 함
+      // 수평 확정 → 그때만 캡처
       if (lock === 'h' && !captured) {
         container.setPointerCapture?.(pid);
         captured = true;
@@ -391,19 +380,23 @@ function setupPointerSwipe(
     const dt = Date.now() - t0;
     const scDiff = Math.abs(getScrollTop() - startScrollY);
 
-    // 1) 수평 스와이프
-    if (lock === 'h' && Math.abs(dx) > swipeThreshold) {
+    // 에지 스와이프: 좌측 가장자리에서 오른쪽으로 큰 이동
+    if (lock === 'h' && sx <= edgeBackWidth && dx > swipeThreshold) {
+      onBack?.();
+    }
+    // 일반 수평 스와이프
+    else if (lock === 'h' && Math.abs(dx) > swipeThreshold) {
       dx < 0 ? onSwipeLeft?.() : onSwipeRight?.();
     }
-    // 2) 탭: 수직 제스처 아님 + 스크롤 변화 거의 없음 + 이동/시간이 작음
-    else if (lock !== 'v' &&
+    // 탭: 방향 미결정 상태에서만 인정(수평/수직 제스처 아니어야 함)
+    else if (lock == null &&
              scDiff <= scrollTolerance &&
              dt < tapTime &&
              Math.abs(dx) < tapMoveTolerance &&
              Math.abs(dy) < tapMoveTolerance) {
       onTap?.(e);
     }
-    // 그 외: 아무 것도 안 함 (세로 스크롤로 취급)
+    // 그 외: 아무 것도 안 함 (세로 스크롤)
 
     tracking = false;
     lock = null;
@@ -411,7 +404,7 @@ function setupPointerSwipe(
       try { container.releasePointerCapture?.(pid); } catch {}
     }
     captured = false;
-    pid = null;
+    pid=null;
   };
 
   const onCancel = onUp;
@@ -432,7 +425,6 @@ function setupPointerSwipe(
     }
   };
 }
-
 
 /* ================================
    Card
@@ -464,7 +456,7 @@ function buildCard(row){
 }
 
 /* ================================
-   메인 슬라이더 (Pointer 이벤트 + 탭 오픈 가드)
+   메인 슬라이더 (수평 제스처는 전환/탭 금지)
 ================================ */
 function buildMiniSlider(card,srcs,meta){
   const slider=card.querySelector('.mini-slider');
@@ -477,7 +469,6 @@ function buildMiniSlider(card,srcs,meta){
     const s=document.createElement('div'); s.className='mini-slide';
     s.innerHTML=`<img src="${src}" alt="이미지 ${i+1}">`; 
     slidesEl.appendChild(s);
-
     const d=document.createElement('div'); d.className='mini-dot';
     d.addEventListener('click',()=>goTo(slider,i));
     dotsEl.appendChild(d);
@@ -487,18 +478,23 @@ function buildMiniSlider(card,srcs,meta){
   card.querySelector('.mini-prev').addEventListener('click',()=>goStep(slider,-1));
   card.querySelector('.mini-next').addEventListener('click',()=>goStep(slider,+1));
 
-  // 포인터 스와이프 + 탭 오픈(안드로이드 고스트클릭 대비 가드)
+  // 포인터 제스처: 수평 스와이프 → 전환, 좌측 에지 → 뒤로가기(메인은 history.back 시도 X)
   setupPointerSwipe(slider, {
     onSwipeLeft:  ()=> goStep(slider,+1),
     onSwipeRight: ()=> goStep(slider,-1),
-    onTap: (e)=>{
+    onTap: (e)=>{ // 수직 탭만 열기
       if (e.target.closest('button,.mini-dots')) return;
       if (!canOpenNow()) return;
       e.preventDefault(); e.stopPropagation();
       openViewer(imgs, meta?.title||'', meta?.date||'');
     },
-    lockThreshold: 10,
-    swipeThreshold: 45,
+    onBack: null,            // 메인에서는 뒤로가기 동작 없음
+    lockThreshold: 12,
+    swipeThreshold: 55,
+    tapMoveTolerance: 6,
+    tapTime: 320,
+    scrollTolerance: 4,
+    edgeBackWidth: 24,
     enableWhen: ()=> true
   });
 
@@ -529,7 +525,7 @@ const goTo=(slider,i)=>setIndex(slider,i);
 const goStep=(slider,step)=>setIndex(slider,(+slider.dataset.index||0)+step);
 
 /* ================================
-   Viewer (사진 탭 시 닫힘) + 공유 + 재생 + 핀치줌
+   Viewer (사진 탭 시 닫힘) + 공유 + 재생 + 핀치줌 + 에지 뒤로가기
 ================================ */
 const viewer      = document.getElementById('viewer');
 const backdrop    = document.getElementById('viewer-backdrop');
@@ -587,6 +583,25 @@ function openViewer(imgs, caption, date){
 
   /* 방금 열린 뒤 합성 클릭 흡수 (Android) */
   justOpenedShield();
+
+  /* 뷰어 내부 포인터 제스처: 좌측 에지 스와이프 → 닫기(뒤로가기) */
+  setupPointerSwipe(vSliderBox, {
+    onSwipeLeft : ()=>{ if(zScale===1) viewerStep(+1); },
+    onSwipeRight: ()=>{ if(zScale===1) viewerStep(-1); },
+    onTap: (e)=>{ // 이미지 탭 시 닫기 (수직 탭만)
+      if (suppressTapClose) return;
+      if (Date.now() - lastOpenTs < 150) return; // 열자마자 닫힘 방지
+      if (e.target && e.target.closest('.viewer-slide img')) closeViewer();
+    },
+    onBack: ()=>{ if(zScale===1) closeViewer(); }, // ← 좌측 에지에서 오른쪽 스와이프
+    lockThreshold: 12,
+    swipeThreshold: 55,
+    tapMoveTolerance: 6,
+    tapTime: 320,
+    scrollTolerance: 4,
+    edgeBackWidth: 24,
+    enableWhen: ()=> true
+  });
 }
 function closeViewer(){
   stopAutoplay();
@@ -601,7 +616,7 @@ function escCloseOnce(e){ if(e.key==='Escape') closeViewer(); if(e.key==='ArrowL
 function viewerGoTo(i){ const total=vSlidesEl.children.length; vIdx=Math.max(0,Math.min(total-1,i)); viewerUpdate(); resetZoom(); }
 function viewerStep(step){ viewerGoTo(vIdx+step); }
 function viewerUpdate(){
-  vSlidesEl.style.transform = `translateX(${-vIdx*100}%)`;
+  vSlidesEl.style.transform = `translateX(-${vIdx*100}%)`;
   [...vDotsEl.children].forEach((d,i)=> d.classList.toggle('active', i===vIdx));
   vPrevBtn.disabled = (vIdx===0);
   const total = vSlidesEl.children.length;
@@ -630,18 +645,9 @@ async function shareCurrent(){
   }finally{ vShareBtn.disabled=false; vShareBtn.textContent=prev; }
 }
 
-/* 배경/시트 탭은 닫힘 없음(요청대로) */
+/* 배경/시트 탭은 닫힘 없음 */
 backdrop.addEventListener('click', e=>e.stopPropagation());
 viewer  .addEventListener('click', e=>e.stopPropagation());
-
-/* 이미지 클릭으로만 닫기 (스와이프/핀치 직후 합성 탭은 무시 / 방금 오픈은 무시) */
-vSlidesEl.addEventListener('click', (e)=>{
-  if (e.target && e.target.tagName === 'IMG'){
-    if (suppressTapClose) return;
-    if (Date.now() - lastOpenTs < 150) return;
-    closeViewer();
-  }
-});
 
 /* 컨트롤 */
 [vPrevBtn, vNextBtn, vCloseBtn, vListBtn, vShareBtn, vPlayBtn].forEach(btn=>{
@@ -653,60 +659,6 @@ vCloseBtn.addEventListener('click', closeViewer);
 vListBtn .addEventListener('click', closeViewer);
 vShareBtn.addEventListener('click', shareCurrent);
 vPlayBtn .addEventListener('click', ()=>{ isAutoplaying ? stopAutoplay() : startAutoplay(); });
-
-/* Viewer: 스와이프/핀치 */
-let vStartX=null, vStartY=null, vHLock=false;
-vSlidesEl.addEventListener('touchstart', e=>{
-  if (e.touches.length===1 && zScale===1){ vStartX=e.touches[0].clientX; vStartY=e.touches[0].clientY; vHLock=false; }
-},{passive:true});
-vSlidesEl.addEventListener('touchmove', e=>{
-  if (zScale!==1 || vStartX==null) return;
-  const dx=e.touches[0].clientX-vStartX, dy=e.touches[0].clientY-vStartY;
-  if(!vHLock && (Math.abs(dx)>8 || Math.abs(dy)>8)){ vHLock=Math.abs(dx)>Math.abs(dy); }
-  if(vHLock && e.cancelable) e.preventDefault();
-},{passive:false});
-vSlidesEl.addEventListener('touchend', e=>{
-  if(vStartX!=null && zScale===1){
-    const dx=e.changedTouches[0].clientX-vStartX;
-    if(Math.abs(dx)>40) dx<0?viewerStep(+1):viewerStep(-1);
-    blockTapCloseBrief();
-  }
-  vStartX=vStartY=null; vHLock=false;
-},{passive:true});
-
-/* Pinch Zoom + Pan */
-vSlidesEl.addEventListener('touchstart', (e)=>{
-  if (e.touches.length===2){
-    const [a,b]=e.touches; pinchStartDist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY); pinchStartScale=zScale; isPinching=true; isPanning=false; stopAutoplay();
-  } else if(e.touches.length===1 && zScale>1){
-    const t=e.touches[0]; panStartX=t.clientX; panStartY=t.clientY; panStartTx=zTx; panStartTy=zTy; isPinching=false; isPanning=true; vSliderBox.classList.add('is-panning'); stopAutoplay();
-  }
-},{passive:false});
-vSlidesEl.addEventListener('touchmove', (e)=>{
-  if (isPinching && e.touches.length===2){
-    if(e.cancelable) e.preventDefault();
-    const [a,b]=e.touches; const dist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
-    zScale=Math.max(Z_MIN,Math.min(Z_MAX,(dist/pinchStartDist)*pinchStartScale)); clampPan(); applyZoom();
-  } else if(isPanning && e.touches.length===1){
-    if(e.cancelable) e.preventDefault();
-    const t=e.touches[0]; zTx=panStartTx+(t.clientX-panStartX); zTy=panStartTy+(t.clientY-panStartY); clampPan(); applyZoom();
-  }
-},{passive:false});
-vSlidesEl.addEventListener('touchend', ()=>{
-  if(isPinching || isPanning){ isPinching=false; isPanning=false; vSliderBox.classList.remove('is-panning'); blockTapCloseBrief(); }
-},{passive:true});
-vSlidesEl.addEventListener('wheel', (e)=>{ // 데스크톱 Ctrl+휠 줌
-  if(!e.ctrlKey) return; e.preventDefault();
-  const factor = e.deltaY<0 ? 1.05 : 0.95;
-  zScale = Math.max(Z_MIN, Math.min(Z_MAX, zScale * factor));
-  clampPan(); applyZoom();
-},{passive:false});
-vSlidesEl.addEventListener('mousedown', (e)=>{ // 데스크톱 드래그 팬
-  if (zScale<=1 || e.button!==0) return;
-  isPanning = true; panStartX=e.clientX; panStartY=e.clientY; panStartTx=zTx; panStartTy=zTy; vSliderBox.classList.add('is-panning'); stopAutoplay(); e.preventDefault();
-});
-window.addEventListener('mousemove', (e)=>{ if (!isPanning) return; zTx=panStartTx+(e.clientX-panStartX); zTy=panStartTy+(e.clientY-panStartY); clampPan(); applyZoom(); });
-window.addEventListener('mouseup', ()=>{ if (isPanning){ isPanning=false; vSliderBox.classList.remove('is-panning'); }});
 
 /* Helper */
 function placeholder(){
