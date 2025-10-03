@@ -80,7 +80,7 @@
   .viewer-nav{position:absolute;top:50%;left:0;right:0;display:flex;justify-content:space-between;transform:translateY(-50%)}
   .viewer-nav button{border:none;background:rgba(0,0,0,.35);color:#fff;width:36px;height:36px;border-radius:50%;cursor:pointer}
 
-  .viewer-caption{margin-top:8px;font-size:14px;line-height:1.6;color:#222}
+  .viewer-caption{margin-top:8px;font-size:14px;line-height:1.7;color:#222}
   .viewer-meta{display:flex;justify-content:flex-end;color:#666;font-size:12px;margin-top:8px}
   .viewer-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
   .viewer-actions .ghost{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 14px;cursor:pointer}
@@ -90,8 +90,23 @@
   #viewerSlider.is-zoomed  .viewer-slide img { cursor: grab; }
   #viewerSlider.is-zoomed.is-panning .viewer-slide img { cursor: grabbing; }
 
-  /* 키보드 포커스 표시 (메인 슬라이더) */
   .mini-slider:focus { outline:2px solid var(--brand); outline-offset:2px; }
+
+  /* ===== 문장(작은 단락) 형광펜 ===== */
+  .viewer-caption .seg{
+    padding: 0 2px;
+    border-radius: 4px;
+    transition: background-color .2s ease, box-shadow .2s ease;
+  }
+  .viewer-caption .seg.is-reading{
+    background: linear-gradient(transparent 55%, #fff59d 0);
+    box-shadow: inset 0 -6px 0 #fff59d;
+  }
+  .viewer-caption .seg:hover{
+    background: linear-gradient(transparent 55%, #e8f0fe 0);
+    box-shadow: inset 0 -6px 0 #e8f0fe;
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -323,7 +338,7 @@ function buildCard(row){
 /* ================================
    메인 슬라이더(스와이프+클릭 오픈+키보드)
 ================================ */
-let activeMiniSlider = null; // 마지막으로 건드린 슬라이더
+let activeMiniSlider = null;
 
 function buildMiniSlider(card,srcs,meta){
   const slider=card.querySelector('.mini-slider');
@@ -331,14 +346,12 @@ function buildMiniSlider(card,srcs,meta){
   const dotsEl=card.querySelector('.mini-dots');
   slidesEl.innerHTML=''; dotsEl.innerHTML='';
 
-  // 포커스/접근성 라벨 + 메타 저장
   slider.tabIndex = 0;
   slider.setAttribute('role','group');
   slider.setAttribute('aria-label','이미지 슬라이더 (←/→ 이동, Enter로 크게 보기)');
   slider._imgs = srcs;
   slider._meta = meta;
 
-  // “최근 조작 슬라이더” 기억
   ['focusin','pointerdown','mouseenter','touchstart','click']
     .forEach(ev => slider.addEventListener(ev, ()=>{ activeMiniSlider = slider; }));
 
@@ -349,11 +362,9 @@ function buildMiniSlider(card,srcs,meta){
     const d=document.createElement('div'); d.className='mini-dot'; d.addEventListener('click',()=>goTo(slider,i)); dotsEl.appendChild(d);
   });
 
-  // 좌/우 버튼
   card.querySelector('.mini-prev').addEventListener('click',()=>goStep(slider,-1));
   card.querySelector('.mini-next').addEventListener('click',()=>goStep(slider,+1));
 
-  // 터치 스와이프 + 방향 잠금
   let startX=null, startY=null, swiped=false, hLock=false;
   slider.addEventListener('touchstart', e=>{
     const t=e.touches[0]; startX=t.clientX; startY=t.clientY; swiped=false; hLock=false;
@@ -362,7 +373,7 @@ function buildMiniSlider(card,srcs,meta){
     if(startX==null) return;
     const t=e.touches[0], dx=t.clientX-startX, dy=t.clientY-startY;
     if(!hLock && (Math.abs(dx)>8 || Math.abs(dy)>8)){ hLock=Math.abs(dx)>Math.abs(dy); }
-    if(hLock && e.cancelable) e.preventDefault(); // 가로 제스처면 페이지 스크롤 억제
+    if(hLock && e.cancelable) e.preventDefault();
   }, {passive:false});
   slider.addEventListener('touchend', e=>{
     if(startX==null) return;
@@ -371,7 +382,6 @@ function buildMiniSlider(card,srcs,meta){
     startX=startY=null;
   }, {passive:true});
 
-  // 클릭 → 뷰어 열기 (스와이프 직후 합성 탭은 무시)
   slider.addEventListener('click', (e)=>{
     if (e.target.closest('button') || e.target.closest('.mini-dots')) return;
     if(swiped){ swiped=false; return; }
@@ -380,7 +390,6 @@ function buildMiniSlider(card,srcs,meta){
 
   setIndex(slider,0);
 }
-
 function setIndex(slider,i){
   const slidesEl=slider.querySelector('.mini-slides');
   const total=slidesEl.children.length;
@@ -409,7 +418,6 @@ function getSliderInView(){
   return best;
 }
 document.addEventListener('keydown', (e)=>{
-  // 뷰어 열려있으면(팝업) 거기 핸들러 사용
   if (viewer && viewer.style.display === 'block') return;
 
   const target = activeMiniSlider || getSliderInView();
@@ -431,7 +439,7 @@ document.addEventListener('keydown', (e)=>{
 });
 
 /* ================================
-   Viewer (닫기/내비/공유/재생+핀치줌)
+   Viewer (닫기/내비/공유)
 ================================ */
 const viewer      = document.getElementById('viewer');
 const backdrop    = document.getElementById('viewer-backdrop');
@@ -448,11 +456,8 @@ const vPlayBtn    = document.getElementById('viewerPlayBtn');
 const vSliderBox  = document.getElementById('viewerSlider');
 
 let vIdx = 0;
-let autoplayTimer = null;
-const AUTOPLAY_MS = 3000;
-let isAutoplaying = false;
 
-/* Zoom state */
+/* Zoom state (이미지 줌/팬) */
 let zScale = 1, zTx = 0, zTy = 0;
 const Z_MIN = 1, Z_MAX = 4;
 let pinchStartDist = 0, pinchStartScale = 1;
@@ -498,8 +503,10 @@ function openViewer(imgs, caption, date){
     vDotsEl.appendChild(d);
   });
 
-  vCaptionEl.textContent = caption || '';
+  // ✨ 캡션을 문장(작은 단락) 단위로 렌더
+  renderCaptionAsSegments(caption || '');
   vDateEl.textContent = date || '';
+
   vIdx = 0; viewerUpdate();
   resetZoom();
 
@@ -509,22 +516,21 @@ function openViewer(imgs, caption, date){
   document.addEventListener('keydown', escCloseOnce);
   document.body.classList.add('no-scroll');
 
-  stopAutoplay();
+  stopAllReadingImmediately(); // 새로 열면 TTS 상태 초기화
 }
 function closeViewer(){
-  stopAutoplay();
+  stopAllReadingImmediately(); // 완전 종료(하이라이트 제거)
   viewer.style.display='none';
   backdrop.style.display='none';
   viewer.setAttribute('aria-hidden','true');
   document.removeEventListener('keydown', escCloseOnce);
   document.body.classList.remove('no-scroll');
 }
-function escCloseOnce(e){ 
-  if(e.key==='Escape') closeViewer(); 
+function escCloseOnce(e){
+  if(e.key==='Escape') closeViewer();
   if(e.key==='ArrowLeft') viewerStep(-1);
   if(e.key==='ArrowRight') viewerStep(+1);
 }
-
 function viewerGoTo(i){
   const total = vSlidesEl.children.length;
   vIdx = Math.max(0, Math.min(total-1, i));
@@ -540,29 +546,14 @@ function viewerUpdate(){
   vNextBtn.disabled = (vIdx===total-1);
 }
 
-/* Autoplay */
-function startAutoplay(){
-  if (isAutoplaying) return;
-  isAutoplaying = true;
-  vPlayBtn.textContent = '일시정지';
-  autoplayTimer = setInterval(()=>{
-    const total = vSlidesEl.children.length;
-    if (vIdx >= total-1) viewerGoTo(0);
-    else viewerStep(+1);
-  }, AUTOPLAY_MS);
-}
-function stopAutoplay(){
-  isAutoplaying = false;
-  vPlayBtn.textContent = '재생';
-  if (autoplayTimer) { clearInterval(autoplayTimer); autoplayTimer = null; }
-}
-
-/* Share */
+/* ================================
+   Share
+================================ */
 async function shareCurrent(){
   const img = viewerImgEl();
   if (!img) return;
   const title = (pageTitleEl?.textContent || '뉴스&홍보');
-  const text  = vCaptionEl.textContent || '';
+  const text  = (vCaptionEl.textContent || '').trim();
 
   const prevTxt = vShareBtn.textContent;
   vShareBtn.disabled = true;
@@ -579,18 +570,16 @@ async function shareCurrent(){
       await navigator.share({ title, text, files: [file] });
       return;
     }
-    if (navigator.share) { // 파일 공유 불가 → 링크 공유
+    if (navigator.share) {
       await navigator.share({ title, text, url: img.src });
       return;
     }
-    if (navigator.clipboard && window.ClipboardItem) { // 이미지 복사 시도
+    if (navigator.clipboard && window.ClipboardItem) {
       try{
         await navigator.clipboard.write([ new ClipboardItem({ [mime]: blob }) ]);
-        alert('이미지가 클립보드에 복사되었습니다.');
-        return;
+        alert('이미지가 클립보드에 복사되었습니다.'); return;
       }catch(e){}
     }
-    // 최종 폴백
     if (navigator.clipboard) {
       await navigator.clipboard.writeText(`${text}\n${img.src}`);
       alert('링크가 클립보드에 복사되었습니다.');
@@ -613,8 +602,169 @@ async function shareCurrent(){
   }
 }
 
+/* ================================
+   ✨ TTS: 문장(작은 단락) 단위 읽기 + 형광펜
+================================ */
+let ttsEnabled = false;   // 읽기 중인지
+let isPaused   = false;   // 일시정지 여부(형광펜 유지)
+let ttsVoice   = null;
+
+let captionSegNodes = []; // span 리스트
+let captionSegIndex = 0;  // 현재(혹은 마지막 강조) 인덱스
+let ttsCurrentUtter = null;
+
+function pickKoVoice(){
+  if (!('speechSynthesis' in window)) return;
+  const voices = speechSynthesis.getVoices();
+  ttsVoice = voices.find(v => (v.lang||'').toLowerCase().startsWith('ko'))
+          || voices.find(v => /korean|한국어/i.test(v.name))
+          || voices[0] || null;
+}
+if ('speechSynthesis' in window) {
+  pickKoVoice();
+  window.speechSynthesis.addEventListener('voiceschanged', pickKoVoice);
+}
+
+/* 문장(작은 단락) 분할: 종결부호/종결어미 기준 + 긴 문장은 50~60자쯤으로 추가 분할 */
+function splitSentencesKorean(text) {
+  if (!text) return [];
+  const trimmed = text.replace(/\s+/g, ' ').trim();
+  const roughParts = trimmed.split(/[\n\r]+|[•·▪●‣◦]+/).map(s => s.trim()).filter(Boolean);
+  const out = [];
+  const re = /(.+?(?:[\.!?…]+|(?:다|요|습니다|습니까|네요|군요|랍니다|였다|된다|했다|일까|일까요|일 수도 있다|일수도 있다)\s*(?:요)?)(?=\s|$)|.+?$)/g;
+  for (const part of roughParts) {
+    const segs = part.match(re) || [];
+    for (let seg of segs) {
+      seg = seg.trim(); if (!seg) continue;
+      if (seg.length > 70) {
+        const chunks = seg.match(/.{1,55}(?:\s|$)/g) || [seg];
+        chunks.forEach(c => out.push(c.trim()));
+      } else {
+        out.push(seg);
+      }
+    }
+  }
+  return out;
+}
+
+/* 캡션을 span.seg들로 렌더 + 클릭 시 해당 문장부터 읽기 */
+function renderCaptionAsSegments(text) {
+  captionSegNodes = [];
+  captionSegIndex = 0;
+  vCaptionEl.innerHTML = '';
+  const segs = splitSentencesKorean(text);
+  if (segs.length === 0) return;
+
+  const frag = document.createDocumentFragment();
+  segs.forEach((s, i) => {
+    const span = document.createElement('span');
+    span.className = 'seg';
+    span.textContent = s;
+    span.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if (!('speechSynthesis' in window)) { alert('브라우저가 음성합성을 지원하지 않습니다.'); return; }
+      isPaused = false;
+      ttsEnabled = true;
+      startSegmentTTS(i);
+    });
+    frag.appendChild(span);
+    if (i !== segs.length - 1) frag.appendChild(document.createTextNode(' '));
+    captionSegNodes.push(span);
+  });
+  vCaptionEl.appendChild(frag);
+}
+
+/* 현재 문장 형광펜 토글 + 가시성 유지 */
+function paintCurrentSegment(idx) {
+  captionSegNodes.forEach((n, k) => n.classList.toggle('is-reading', k === idx));
+  const node = captionSegNodes[idx];
+  if (node) {
+    const rect = node.getBoundingClientRect();
+    const box = vCaptionEl.getBoundingClientRect();
+    if (rect.top < box.top || rect.bottom > box.bottom + 60) {
+      node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+}
+
+function speakOneSentence(text, onend) {
+  const u = new SpeechSynthesisUtterance(text);
+  if (ttsVoice) u.voice = ttsVoice;
+  u.lang  = ttsVoice?.lang || 'ko-KR';
+  u.rate  = 1.0;
+  u.pitch = 1.0;
+  u.onend = () => { ttsCurrentUtter = null; onend && onend(); };
+  u.onerror= () => { ttsCurrentUtter = null; onend && onend(); };
+  ttsCurrentUtter = u;
+  speechSynthesis.speak(u);
+}
+
+function startSegmentTTS(startIdx = captionSegIndex || 0) {
+  if (!('speechSynthesis' in window)) { alert('브라우저가 음성합성을 지원하지 않습니다.'); return; }
+  if (!captionSegNodes.length) return;
+
+  captionSegIndex = Math.max(0, Math.min(captionSegNodes.length - 1, startIdx));
+  ttsEnabled = true;
+  isPaused   = false;
+  vPlayBtn.textContent = '일시정지';
+
+  function step() {
+    if (!ttsEnabled || isPaused) return;
+    const span = captionSegNodes[captionSegIndex];
+    if (!span) { finishReadingUI(); return; }
+    paintCurrentSegment(captionSegIndex);
+    const text = span.textContent.trim();
+    speakOneSentence(text, () => {
+      if (!ttsEnabled || isPaused) return;
+      captionSegIndex++;
+      if (captionSegIndex >= captionSegNodes.length) {
+        finishReadingUI();
+      } else {
+        step();
+      }
+    });
+  }
+
+  try { speechSynthesis.cancel(); } catch(_) {}
+  step();
+}
+
+/* 일시정지: 음성만 멈추고 하이라이트는 유지 */
+function pauseSegmentTTS() {
+  isPaused = true;
+  try { speechSynthesis.cancel(); } catch(_){}
+  vPlayBtn.textContent = '재생';
+}
+
+/* 모두 끝났을 때 UI 정리(하이라이트 제거) */
+function finishReadingUI() {
+  ttsEnabled = false;
+  isPaused   = false;
+  vPlayBtn.textContent = '재생';
+  captionSegNodes.forEach(n => n.classList.remove('is-reading'));
+}
+
+/* 닫기 등에서 완전 종료 */
+function stopAllReadingImmediately() {
+  ttsEnabled = false;
+  isPaused   = false;
+  try { speechSynthesis.cancel(); } catch(_){}
+  vPlayBtn.textContent = '재생';
+  captionSegNodes.forEach(n => n.classList.remove('is-reading'));
+}
+
+/* 재생 버튼: 토글 (재생 ↔ 일시정지) */
+vPlayBtn.addEventListener('click', ()=>{
+  if (!('speechSynthesis' in window)) { alert('브라우저가 음성합성을 지원하지 않습니다.'); return; }
+  if (ttsEnabled && !isPaused) { // 읽는 중 → 일시정지
+    pauseSegmentTTS();
+  } else { // (재)생
+    startSegmentTTS(captionSegIndex || 0);
+  }
+});
+
 /* 닫힘/버튼 이벤트 */
-[vPrevBtn, vNextBtn, vCloseBtn, vListBtn, vShareBtn, vPlayBtn].forEach(btn=>{
+[vPrevBtn, vNextBtn, vCloseBtn, vListBtn, vShareBtn].forEach(btn=>{
   btn.addEventListener('click', (e)=>{ e.stopPropagation(); });
 });
 vPrevBtn.addEventListener('click', ()=> viewerStep(-1));
@@ -622,7 +772,6 @@ vNextBtn.addEventListener('click', ()=> viewerStep(+1));
 vCloseBtn.addEventListener('click', closeViewer);
 vListBtn .addEventListener('click', closeViewer);
 vShareBtn.addEventListener('click', shareCurrent);
-vPlayBtn .addEventListener('click', ()=>{ isAutoplaying ? stopAutoplay() : startAutoplay(); });
 
 /* Viewer 스와이프(확대 안했을 때) */
 let vStartX=null, vStartY=null, vHLock=false;
@@ -655,13 +804,11 @@ vSlidesEl.addEventListener('touchstart', (e)=>{
       e.touches[0].clientY - e.touches[1].clientY
     );
     pinchStartScale = zScale;
-    stopAutoplay();
   } else if (e.touches.length===1 && zScale>1){
     isPanning = true; isPinching=false;
     panStartX = e.touches[0].clientX; panStartY = e.touches[0].clientY;
     panStartTx = zTx; panStartTy = zTy;
     vSliderBox.classList.add('is-panning');
-    stopAutoplay();
   }
 },{passive:false});
 vSlidesEl.addEventListener('touchmove', (e)=>{
@@ -707,7 +854,6 @@ vSlidesEl.addEventListener('mousedown', (e)=>{
   panStartX = e.clientX; panStartY = e.clientY;
   panStartTx = zTx; panStartTy = zTy;
   vSliderBox.classList.add('is-panning');
-  stopAutoplay();
   e.preventDefault();
 });
 window.addEventListener('mousemove', (e)=>{
