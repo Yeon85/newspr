@@ -31,7 +31,7 @@
   /* ===== 메인 카드 슬라이더 ===== */
   .mini-slider{
     position:relative;border-radius:12px;overflow:hidden;background:#ddd;
-    overscroll-behavior:contain; touch-action:pan-y; /* 가로 제스처 시 세로 스크롤 충돌 방지 */
+    overscroll-behavior:contain; touch-action:pan-y;
   }
   .mini-slides{display:flex;transition:transform .35s ease}
   .mini-slide{min-width:100%}
@@ -39,6 +39,8 @@
     display:block;width:100%;aspect-ratio:4/5;object-fit:cover;  /* 280×350 비율 */
     cursor:pointer; -webkit-user-drag:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   }
+  .mini-slider, .mini-slides, .mini-slide img{ overscroll-behavior:contain; touch-action:pan-y; }
+
   /* ‹ › : 두 번째 장부터 보이기 */
   .mini-nav{position:absolute;top:50%;left:0;right:0;display:flex;justify-content:space-between;transform:translateY(-50%);pointer-events:none;opacity:0;transition:opacity .2s}
   .mini-nav button{pointer-events:auto;border:none;background:rgba(0,0,0,.35);color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer}
@@ -54,17 +56,7 @@
   .more-btn{display:inline-flex;gap:4px;align-items:center;margin-top:6px;padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:12px;color:#333;cursor:pointer}
   .more-btn[hidden]{display:none!important}
   .meta{display:flex;justify-content:flex-end;color:#666;font-size:12px;margin-top:6px}
-/* 추가 / 보강 */
-.mini-slider,
-.mini-slides,
-.mini-slide img {
-  overscroll-behavior: contain;
-  touch-action: pan-y; /* 가로 스와이프 시 세로 스크롤 충돌 방지 */
-  -webkit-user-drag: none;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-}
+
   .sentinel{height:24px}
 
   /* ===== 팝업(뷰어) ===== */
@@ -154,8 +146,9 @@
   </div>
 
 <script>
-/* ===== 공통: 포인터(터치) 지원 감지 ===== */
-const USE_POINTER = !!window.PointerEvent && navigator.maxTouchPoints > 0;
+/* ===== 포인터 감지 + 중복오픈 가드 ===== */
+const USE_POINTER = !!window.PointerEvent;   // PC 마우스도 포함
+let _lastOpenAt = 0; // openViewer 중복 호출 방지
 
 /* ===== 더미 본문 ===== */
 const DUMMY_SENTENCES = [
@@ -285,7 +278,7 @@ const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)loadNe
 io.observe(sentinel);
 
 /* ===== 공용 제스처 유틸 (Pointer 전용) ===== */
-function setupPointerSwipe(container, { onSwipeLeft, onSwipeRight, onTap, lockThreshold=10, swipeThreshold=50, enableWhen=()=>true }){
+function setupPointerSwipe(container, { onSwipeLeft, onSwipeRight, onTap, lockThreshold=10, swipeThreshold=45, enableWhen=()=>true }){
   if(!window.PointerEvent) return null;
   let sx=0, sy=0, dx=0, dy=0, lock=null, downTime=0, tracking=false, pointerId=null;
 
@@ -351,13 +344,14 @@ function buildCard(row){
   return card;
 }
 
-/* ===== 메인 슬라이더 (뷰어와 동일 제스처 규칙) ===== */
+/* ===== 메인 슬라이더 (컨테이너 바인딩 + 클릭 어디든 열기) ===== */
 function buildMiniSlider(card,srcs,meta){
   const slider=card.querySelector('.mini-slider');
   const slidesEl=card.querySelector('.mini-slides');
   const dotsEl=card.querySelector('.mini-dots');
   slidesEl.innerHTML=''; dotsEl.innerHTML='';
 
+  // 이미지 & 점 생성
   srcs.forEach((src,i)=>{
     const s=document.createElement('div'); s.className='mini-slide';
     const img=new Image(); img.src=src; img.alt=`이미지 ${i+1}`; img.setAttribute('draggable','false');
@@ -365,54 +359,53 @@ function buildMiniSlider(card,srcs,meta){
     const d=document.createElement('div'); d.className='mini-dot'; d.addEventListener('click',()=>goTo(slider,i)); dotsEl.appendChild(d);
   });
 
+  // 좌/우 버튼
   card.querySelector('.mini-prev').addEventListener('click',()=>goStep(slider,-1));
   card.querySelector('.mini-next').addEventListener('click',()=>goStep(slider,+1));
 
+  // Pointer(마우스/터치 공통): 컨테이너에 바인딩
   if (USE_POINTER) {
-    /* ✅ 컨테이너(slider)에 바인딩: 두 번째 장 이후도 안정적으로 인식 */
     setupPointerSwipe(slider,{
       onSwipeLeft: ()=>goStep(slider,+1),
       onSwipeRight:()=>goStep(slider,-1),
-      onTap:(e)=>{ if(e.target && e.target.tagName==='IMG') openViewer(srcs, meta?.title||'', meta?.date||''); },
+      onTap:(e)=>{
+        // 버튼/도트가 아니면 어디를 눌러도 열기 (PC pointercapture 이슈 대응)
+        if (e.target.closest('button') || e.target.closest('.mini-dots')) return;
+        openViewer(srcs, meta?.title||'', meta?.date||'');
+      },
       lockThreshold: 10,
-      swipeThreshold: 45,   // 살짝 낮춰 iOS에서 짧은 스와이프도 인식
-      enableWhen:()=>true
+      swipeThreshold: 45,
+      enableWhen: ()=> true
     });
   } else {
-    /* 터치 폴백 + 데스크톱 클릭 */
+    // 구형 터치 폴백
     let sx=0, sy=0, dx=0, dy=0, t0=0, lock=null;
-
     slider.addEventListener('touchstart', e=>{
       const t=e.touches[0]; sx=t.clientX; sy=t.clientY; dx=0; dy=0; t0=Date.now(); lock=null;
     }, {passive:true});
-
     slider.addEventListener('touchmove', e=>{
       if(!sx && !sy) return;
-      const t=e.touches[0];
-      dx=t.clientX - sx; dy=t.clientY - sy;
-      if(lock==null && (Math.abs(dx)>8 || Math.abs(dy)>8)) lock = Math.abs(dx)>Math.abs(dy) ? 'h' : 'v';
-      if(lock==='h' && e.cancelable) e.preventDefault(); // 가로로 잠기면 세로 스크롤 억제
+      const t=e.touches[0]; dx=t.clientX-sx; dy=t.clientY-sy;
+      if(lock==null && (Math.abs(dx)>8 || Math.abs(dy)>8)) lock = Math.abs(dx)>Math.abs(dy) ? 'h':'v';
+      if(lock==='h' && e.cancelable) e.preventDefault();
     }, {passive:false});
-
     slider.addEventListener('touchend', e=>{
       const dt=Date.now()-t0;
-      if(lock==='h' && Math.abs(dx)>40){ dx<0 ? goStep(slider,+1) : goStep(slider,-1); }
+      if(lock==='h' && Math.abs(dx)>40){ dx<0?goStep(slider,+1):goStep(slider,-1); }
       else if(dt<300 && Math.abs(dx)<8 && Math.abs(dy)<8){ openViewer(srcs, meta?.title||'', meta?.date||''); }
       sx=sy=dx=dy=0; lock=null;
     }, {passive:true});
-
-    if (!('ontouchstart' in window)) {
-      slider.addEventListener('click', (e)=>{
-        const img=e.target.closest('.mini-slide img');
-        if(!img) return;
-        openViewer(srcs, meta?.title||'', meta?.date||'');
-      });
-    }
   }
+
+  // ✅ 환경과 무관하게 ‘클릭’으로도 항상 열리게 (버튼/도트는 제외)
+  slider.addEventListener('click', (e)=>{
+    if (e.target.closest('button') || e.target.closest('.mini-dots')) return;
+    if (Date.now() - _lastOpenAt < 350) return; // onTap 직후 click 중복 방지
+    openViewer(srcs, meta?.title || '', meta?.date || '');
+  });
 
   setIndex(slider,0);
 }
-
 function setIndex(slider,i){
   const slidesEl=slider.querySelector('.mini-slides');
   const total=slidesEl.children.length;
@@ -464,6 +457,9 @@ function applyZoom(){ const img=viewerImgEl(); if(!img) return; img.style.transf
 function clampPan(){ const boxW=vSliderBox.clientWidth, boxH=vSliderBox.clientHeight; const maxX=(boxW*(zScale-1))/2, maxY=(boxH*(zScale-1))/2; zTx=Math.max(-maxX,Math.min(maxX,zTx)); zTy=Math.max(-maxY,Math.min(maxY,zTy)); }
 
 function openViewer(imgs, caption, date){
+  if (Date.now() - _lastOpenAt < 350) return; // 중복 오픈 가드
+  _lastOpenAt = Date.now();
+
   vSlidesEl.innerHTML=''; vDotsEl.innerHTML='';
   imgs.forEach((src,i)=>{
     const s=document.createElement('div'); s.className='viewer-slide';
@@ -564,7 +560,7 @@ vSlidesEl.addEventListener('touchend', ()=>{
   if(isPinching || isPanning){ isPinching=false; isPanning=false; vSliderBox.classList.remove('is-panning'); blockTapCloseBrief(); }
 },{passive:true});
 
-/* 배경/시트 탭은 닫힘 없음 (이미지/캡션/날짜만) */
+/* 배경/시트 탭은 닫힘 없음 — 이미지/캡션/날짜만 닫힘 */
 backdrop.addEventListener('click', e=>e.stopPropagation());
 viewer.addEventListener('click', e=>e.stopPropagation());
 
@@ -586,12 +582,6 @@ viewer.addEventListener('click', e=>e.stopPropagation());
   }
   bind(vCaptionEl); bind(vDateEl);
 })();
-
-/* 마우스: Ctrl+휠 줌 & 드래그 팬 */
-vSlidesEl.addEventListener('wheel', (e)=>{ if(!e.ctrlKey) return; e.preventDefault(); const f=(-e.deltaY)>0?1.05:0.95; zScale=Math.max(Z_MIN,Math.min(Z_MAX,zScale*f)); clampPan(); applyZoom(); }, {passive:false});
-vSlidesEl.addEventListener('mousedown', (e)=>{ if(zScale<=1||e.button!==0) return; isPanning=true; panStartX=e.clientX; panStartY=e.clientY; panStartTx=zTx; panStartTy=zTy; vSliderBox.classList.add('is-panning'); stopAutoplay(); e.preventDefault(); });
-window.addEventListener('mousemove', (e)=>{ if(!isPanning) return; zTx=panStartTx+(e.clientX-panStartX); zTy=panStartTy+(e.clientY-panStartY); clampPan(); applyZoom(); });
-window.addEventListener('mouseup', ()=>{ if(isPanning){ isPanning=false; vSliderBox.classList.remove('is-panning'); } });
 
 /* Helper */
 function placeholder(){
