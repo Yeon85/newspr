@@ -367,37 +367,63 @@ function buildMiniSlider(card,srcs,meta){
   card.querySelector('.mini-prev').addEventListener('click',()=>goStep(slider,-1));
   card.querySelector('.mini-next').addEventListener('click',()=>goStep(slider,+1));
 
-  if (USE_POINTER) {
-    setupPointerSwipe(slider,{
-      onSwipeLeft: ()=>goStep(slider,+1),
-      onSwipeRight:()=>goStep(slider,-1),
-      onTap:(e)=>{
-        if (e.target.closest('button') || e.target.closest('.mini-dots')) return;
-        e.stopPropagation(); // ← 열자마자 닫히는 일 방지
-        openViewer(srcs, meta?.title||'', meta?.date||'');
-      },
-      lockThreshold: 10,
-      swipeThreshold: 45,
-      enableWhen: ()=> true
-    });
-  } else {
-    let sx=0, sy=0, dx=0, dy=0, t0=0, lock=null;
-    slider.addEventListener('touchstart', e=>{
-      const t=e.touches[0]; sx=t.clientX; sy=t.clientY; dx=0; dy=0; t0=Date.now(); lock=null;
-    }, {passive:true});
-    slider.addEventListener('touchmove', e=>{
-      if(!sx && !sy) return;
-      const t=e.touches[0]; dx=t.clientX-sx; dy=t.clientY-sy;
-      if(lock==null && (Math.abs(dx)>8 || Math.abs(dy)>8)) lock = Math.abs(dx)>Math.abs(dy) ? 'h':'v';
-      if(lock==='h' && e.cancelable) e.preventDefault();
-    }, {passive:false});
-    slider.addEventListener('touchend', e=>{
-      const dt=Date.now()-t0;
-      if(lock==='h' && Math.abs(dx)>40){ dx<0?goStep(slider,+1):goStep(slider,-1); }
-      else if(dt<300 && Math.abs(dx)<8 && Math.abs(dy)<8){ openViewer(srcs, meta?.title||'', meta?.date||''); }
-      sx=sy=dx=dy=0; lock=null;
-    }, {passive:true});
-  }
+ // 교체본 (스와이프 후 즉시 닫힘 방지 추가)
+if (USE_POINTER) {
+  setupPointerSwipe(vSliderBox,{
+    onSwipeLeft: ()=>{ 
+      if (zScale===1) { 
+        viewerStep(+1); 
+        blockTapCloseBrief();   // ← 추가: 스와이프 직후 합성 클릭 무시
+      }
+    },
+    onSwipeRight:()=>{ 
+      if (zScale===1) { 
+        viewerStep(-1); 
+        blockTapCloseBrief();   // ← 추가
+      }
+    },
+    onTap:(e)=>{
+      if (suppressTapClose) return;
+      const isImg  = !!e.target.closest('.viewer-slide img');
+      const isText = !!e.target.closest('#viewerCaption, #viewerDate');
+      if (isImg || isText) closeViewer();
+    },
+    enableWhen:()=>true
+  });
+}
+
+
+// 터치 스와이프 폴백 (PointerEvent 미지원 환경용)
+if (!USE_POINTER) {
+  let vsStartX=0, vsStartY=0, vsDX=0, vsDY=0, vsLock=null, vsT0=0;
+
+  vSlidesEl.addEventListener('touchstart', (e)=>{
+    if (e.touches.length!==1 || zScale>1) return;  // 확대 중 스와이프 비활성
+    const t=e.touches[0];
+    vsStartX=t.clientX; vsStartY=t.clientY;
+    vsDX=0; vsDY=0; vsLock=null; vsT0=Date.now();
+  }, {passive:true});
+
+  vSlidesEl.addEventListener('touchmove', (e)=>{
+    if (zScale>1 || e.touches.length!==1) return;
+    const t=e.touches[0];
+    vsDX=t.clientX-vsStartX; vsDY=t.clientY-vsStartY;
+    if (vsLock==null && (Math.abs(vsDX)>8 || Math.abs(vsDY)>8)) {
+      vsLock = Math.abs(vsDX)>Math.abs(vsDY) ? 'h' : 'v';
+    }
+    if (vsLock==='h' && e.cancelable) e.preventDefault(); // 가로 제스처 우선
+  }, {passive:false});
+
+  vSlidesEl.addEventListener('touchend', ()=>{
+    if (zScale>1) return;
+    if (vsLock==='h' && Math.abs(vsDX)>40) {
+      vsDX<0 ? viewerStep(+1) : viewerStep(-1);
+      blockTapCloseBrief(); // ← 스와이프 후 탭 닫힘 방지
+    }
+  }, {passive:true});
+}
+
+
 
   /* 클릭 폴백(포인터 캡처 대비) + 이벤트 전파 차단 */
   slider.addEventListener('click', (e)=>{
