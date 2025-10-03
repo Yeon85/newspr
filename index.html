@@ -350,7 +350,7 @@ function buildMiniSlider(card,srcs,meta){
     if(startX==null) return;
     const t=e.touches[0], dx=t.clientX-startX, dy=t.clientY-startY;
     if(!hLock && (Math.abs(dx)>8 || Math.abs(dy)>8)){ hLock=Math.abs(dx)>Math.abs(dy); }
-    if(hLock && e.cancelable) e.preventDefault(); // 가로 제스처면 페이지 스크롤 억제
+    //if(hLock && e.cancelable) e.preventDefault(); // 가로 제스처면 페이지 스크롤 억제
   }, {passive:false});
   slidesEl.addEventListener('touchend', e=>{
     if(startX==null) return;
