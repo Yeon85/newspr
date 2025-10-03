@@ -550,55 +550,76 @@ function viewerUpdate(){
    Share
 ================================ */
 async function shareCurrent(){
-  const img = viewerImgEl();
-  if (!img) return;
-  const title = (pageTitleEl?.textContent || '뉴스&홍보');
-  const text  = (vCaptionEl.textContent || '').trim();
+  const img = viewerImgEl(); if(!img) return;
 
-  const prevTxt = vShareBtn.textContent;
+  const pageUrl = location.href;
+  const imgUrl  = img.src;
+  const title   = (pageTitleEl?.textContent || '뉴스&홍보');
+  const text    = [vCaptionEl.textContent||'', vDateEl.textContent||'', pageUrl].filter(Boolean).join('\n');
+
+  // 안드로이드에서 카톡으로 텍스트까지 보내려면 링크 공유를 권장
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  let preferLink = false;
+
+  if (isAndroid) {
+    preferLink = confirm(
+      '카카오톡에 텍스트/URL까지 보내시려면 "확인"을 눌러 링크 공유로 전송하세요.\n' +
+      '이미지 파일을 그대로 보내려면 "취소"를 누르세요.'
+    );
+  }
+
   vShareBtn.disabled = true;
+  const prev = vShareBtn.textContent;
   vShareBtn.textContent = '공유 준비 중…';
 
   try{
-    const res  = await fetch(img.src, { mode: 'cors', cache: 'no-store' });
-    const blob = await res.blob();
-    const mime = blob.type || 'image/jpeg';
-    const ext  = (mime.split('/')[1] || 'jpg').replace('jpeg','jpg');
-    const file = new File([blob], `image.${ext}`, { type: mime });
+    if (preferLink || !('canShare' in navigator)) {
+      // 링크(텍스트+URL) 공유 — 카톡 권장 경로
+      if (navigator.share) {
+        await navigator.share({ title, text, url: pageUrl });
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(`${text}\n${imgUrl}`);
+        alert('텍스트와 링크가 클립보드에 복사되었습니다.');
+      } else {
+        prompt('아래 내용을 복사하세요:', `${text}\n${imgUrl}`);
+      }
+      return;
+    }
 
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ title, text, files: [file] });
-      return;
-    }
-    if (navigator.share) {
-      await navigator.share({ title, text, url: img.src });
-      return;
-    }
-    if (navigator.clipboard && window.ClipboardItem) {
-      try{
-        await navigator.clipboard.write([ new ClipboardItem({ [mime]: blob }) ]);
-        alert('이미지가 클립보드에 복사되었습니다.'); return;
-      }catch(e){}
-    }
-    if (navigator.clipboard) {
-      await navigator.clipboard.writeText(`${text}\n${img.src}`);
-      alert('링크가 클립보드에 복사되었습니다.');
+    // 파일 공유 (다수 앱에서 텍스트/URL이 무시될 수 있음)
+    let file = null;
+    try{
+      const res  = await fetch(imgUrl, { mode:'cors', cache:'no-store' });
+      const blob = await res.blob();
+      const mime = blob.type || 'image/jpeg';
+      const ext  = (mime.split('/')[1] || 'jpg').replace('jpeg','jpg');
+      file = new File([blob], `image.${ext}`, { type: mime });
+    }catch(_){}
+
+    if (file && navigator.canShare({ files:[file] })) {
+      // 일부 앱(특히 카톡)에서 text/url을 무시할 수 있음
+      await navigator.share({ title, text, url: pageUrl, files:[file] });
+    } else if (navigator.share) {
+      await navigator.share({ title, text, url: pageUrl });
+    } else if (navigator.clipboard) {
+      await navigator.clipboard.writeText(`${text}\n${imgUrl}`);
+      alert('텍스트와 링크가 클립보드에 복사되었습니다.');
     } else {
-      const a=document.createElement('a'); a.href=img.src; a.download=`image.${ext}`;
-      document.body.appendChild(a); a.click(); a.remove();
+      prompt('아래 내용을 복사하세요:', `${text}\n${imgUrl}`);
     }
-  }catch(err){
+  }catch(e){
+    // 폴백: 최소한 텍스트/링크는 넘기기
     try{
       if (navigator.clipboard) {
-        await navigator.clipboard.writeText(img.src);
-        alert('이미지 링크가 클립보드에 복사되었습니다.');
+        await navigator.clipboard.writeText(`${text}\n${imgUrl}`);
+        alert('텍스트와 링크가 클립보드에 복사되었습니다.');
       } else {
-        prompt('아래 링크를 복사하세요:', img.src);
+        prompt('아래 내용을 복사하세요:', `${text}\n${imgUrl}`);
       }
     }catch(_){}
-  } finally{
+  }finally{
     vShareBtn.disabled = false;
-    vShareBtn.textContent = prevTxt;
+    vShareBtn.textContent = prev;
   }
 }
 
