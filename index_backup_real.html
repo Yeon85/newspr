@@ -465,7 +465,7 @@ function closeViewer(){
   document.body.classList.remove('no-scroll'); // 잠금 해제
 }
 function escCloseOnce(e){ 
-  //if(e.key==='Escape') closeViewer(); 
+  if(e.key==='Escape') closeViewer(); 
   if(e.key==='ArrowLeft') viewerStep(-1);
   if(e.key==='ArrowRight') viewerStep(+1);
 }
@@ -567,12 +567,12 @@ backdrop.addEventListener('click', (e)=>{ e.stopPropagation(); });
 viewer.addEventListener('click', (e)=>{ e.stopPropagation(); });
 
 /* 이미지 클릭으로만 닫기 (스와이프/핀치 직후 합성 탭은 무시) */
-//vSlidesEl.addEventListener('click', (e)=>{
-//  const isImgClick = e.target && e.target.tagName === 'IMG';
-//  if (!isImgClick) return;
-//  if (suppressTapClose) return;
-//  closeViewer();
-//});
+vSlidesEl.addEventListener('click', (e)=>{
+  const isImgClick = e.target && e.target.tagName === 'IMG';
+  if (!isImgClick) return;
+  if (suppressTapClose) return;
+  closeViewer();
+});
 
 /* 컨트롤 클릭은 닫힘 방지 + 동작 */
 [vPrevBtn, vNextBtn, vCloseBtn, vListBtn, vShareBtn, vPlayBtn].forEach(btn=>{
