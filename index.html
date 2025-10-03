@@ -147,8 +147,8 @@
 
 <script>
 /* ===== 포인터 감지 + 중복오픈 가드 ===== */
-const USE_POINTER = !!window.PointerEvent;   // PC 마우스도 포함
-let _lastOpenAt = 0; // openViewer 중복 호출 방지
+const USE_POINTER = !!window.PointerEvent;
+let _lastOpenAt = 0;
 
 /* ===== 더미 본문 ===== */
 const DUMMY_SENTENCES = [
@@ -344,14 +344,13 @@ function buildCard(row){
   return card;
 }
 
-/* ===== 메인 슬라이더 (컨테이너 바인딩 + 클릭 어디든 열기) ===== */
+/* ===== 메인 슬라이더 ===== */
 function buildMiniSlider(card,srcs,meta){
   const slider=card.querySelector('.mini-slider');
   const slidesEl=card.querySelector('.mini-slides');
   const dotsEl=card.querySelector('.mini-dots');
   slidesEl.innerHTML=''; dotsEl.innerHTML='';
 
-  // 이미지 & 점 생성
   srcs.forEach((src,i)=>{
     const s=document.createElement('div'); s.className='mini-slide';
     const img=new Image(); img.src=src; img.alt=`이미지 ${i+1}`; img.setAttribute('draggable','false');
@@ -359,11 +358,9 @@ function buildMiniSlider(card,srcs,meta){
     const d=document.createElement('div'); d.className='mini-dot'; d.addEventListener('click',()=>goTo(slider,i)); dotsEl.appendChild(d);
   });
 
-  // 좌/우 버튼
   card.querySelector('.mini-prev').addEventListener('click',()=>goStep(slider,-1));
   card.querySelector('.mini-next').addEventListener('click',()=>goStep(slider,+1));
 
-  // Pointer(마우스/터치 공통): 컨테이너에 바인딩
   if (USE_POINTER) {
     setupPointerSwipe(slider,{
       onSwipeLeft: ()=>goStep(slider,+1),
@@ -377,7 +374,6 @@ function buildMiniSlider(card,srcs,meta){
       enableWhen: ()=> true
     });
   } else {
-    // 구형 터치 폴백
     let sx=0, sy=0, dx=0, dy=0, t0=0, lock=null;
     slider.addEventListener('touchstart', e=>{
       const t=e.touches[0]; sx=t.clientX; sy=t.clientY; dx=0; dy=0; t0=Date.now(); lock=null;
@@ -396,10 +392,9 @@ function buildMiniSlider(card,srcs,meta){
     }, {passive:true});
   }
 
-  // 환경과 무관하게 ‘클릭’으로도 항상 열리게 (버튼/도트는 제외)
   slider.addEventListener('click', (e)=>{
     if (e.target.closest('button') || e.target.closest('.mini-dots')) return;
-    if (Date.now() - _lastOpenAt < 350) return; // onTap 직후 click 중복 방지
+    if (Date.now() - _lastOpenAt < 350) return;
     openViewer(srcs, meta?.title || '', meta?.date || '');
   });
 
@@ -446,7 +441,6 @@ const Z_MIN = 1, Z_MAX = 4;
 let pinchStartDist = 0, pinchStartScale = 1;
 let panStartX = 0, panStartY = 0, panStartTx = 0, panStartTy = 0;
 let isPanning = false, isPinching = false;
-/* 탭 방지 */
 let suppressTapClose = false;
 function blockTapCloseBrief(){ suppressTapClose = true; setTimeout(()=>{ suppressTapClose = false; }, 250); }
 
@@ -456,7 +450,7 @@ function applyZoom(){ const img=viewerImgEl(); if(!img) return; img.style.transf
 function clampPan(){ const boxW=vSliderBox.clientWidth, boxH=vSliderBox.clientHeight; const maxX=(boxW*(zScale-1))/2, maxY=(boxH*(zScale-1))/2; zTx=Math.max(-maxX,Math.min(maxX,zTx)); zTy=Math.max(-maxY,Math.min(maxY,zTy)); }
 
 function openViewer(imgs, caption, date){
-  if (Date.now() - _lastOpenAt < 350) return; // 중복 오픈 가드
+  if (Date.now() - _lastOpenAt < 350) return;
   _lastOpenAt = Date.now();
 
   vSlidesEl.innerHTML=''; vDotsEl.innerHTML='';
@@ -499,7 +493,7 @@ function startAutoplay(){ if(isAutoplaying) return; isAutoplaying=true; vPlayBtn
   autoplayTimer=setInterval(()=>{ const total=vSlidesEl.children.length; if(vIdx>=total-1) viewerGoTo(0); else viewerStep(+1); }, AUTOPLAY_MS); }
 function stopAutoplay(){ isAutoplaying=false; vPlayBtn.textContent='재생'; if(autoplayTimer){clearInterval(autoplayTimer); autoplayTimer=null;} }
 
-/* Share (파일 공유 우선) */
+/* Share */
 async function shareCurrent(){
   const img=viewerImgEl(); if(!img) return;
   const title=(pageTitleEl?.textContent||'뉴스&홍보'); const text=vCaptionEl.textContent||'';
@@ -525,19 +519,33 @@ vListBtn .addEventListener('click', closeViewer);
 vShareBtn.addEventListener('click', shareCurrent);
 vPlayBtn .addEventListener('click', ()=>{ isAutoplaying ? stopAutoplay() : startAutoplay(); });
 
-/* Viewer: Pointer 스와이프 + 이미지 탭 닫기 (✔ 확대 중에도 닫힘) */
+/* ====== 여기부터 '클릭/탭으로 닫기'를 견고하게 ====== */
+/* 1) PointerEvent: 슬라이더 컨테이너에서 onTap → 버튼/도트 제외, 어디든 닫기  */
 if (USE_POINTER) {
   setupPointerSwipe(vSliderBox,{
     onSwipeLeft: ()=>{ if(zScale===1) viewerStep(+1); },
     onSwipeRight:()=>{ if(zScale===1) viewerStep(-1); },
     onTap:(e)=>{
-      if(!suppressTapClose && e.target.tagName==='IMG') closeViewer(); // zScale 무시하고 닫기
+      if (suppressTapClose) return;
+      if (e.target.closest('#viewerPrev, #viewerNext, #viewerCloseBtn, #viewerListBtn, #viewerShareBtn, #viewerPlayBtn, .viewer-dots, .viewer-actions, .viewer-header')) return;
+      closeViewer();
     },
     enableWhen:()=>true
   });
 }
 
-/* Viewer: 핀치줌/팬 (touch) */
+/* 2) 클릭 폴백: Chrome에서 pointer capture로 target이 바뀌어도 닫히게 슬라이드 전체에 바인딩 */
+vSlidesEl.addEventListener('click', (e)=>{
+  if (suppressTapClose) return;
+  if (e.target.closest('#viewerPrev, #viewerNext, .viewer-dots')) return;
+  closeViewer();
+});
+
+/* 3) 캡션/날짜 클릭 시 닫기 */
+vCaptionEl.addEventListener('click', ()=>{ if(!suppressTapClose) closeViewer(); });
+vDateEl   .addEventListener('click', ()=>{ if(!suppressTapClose) closeViewer(); });
+
+/* 4) 터치 핀치/팬 (닫힘 방지 플래그 포함) */
 vSlidesEl.addEventListener('touchstart', (e)=>{
   if(e.touches.length===2){
     isPinching=true; isPanning=false;
@@ -560,37 +568,6 @@ vSlidesEl.addEventListener('touchmove', (e)=>{
 vSlidesEl.addEventListener('touchend', ()=>{
   if(isPinching || isPanning){ isPinching=false; isPanning=false; vSliderBox.classList.remove('is-panning'); blockTapCloseBrief(); }
 },{passive:true});
-
-/* 배경/시트 탭은 닫힘 없음 — 이미지/캡션/날짜만 닫힘 */
-backdrop.addEventListener('click', e=>e.stopPropagation());
-viewer.addEventListener('click', e=>e.stopPropagation());
-
-/* 캡션/날짜 탭 시 닫기 (그대로 유지) */
-(function addTapToCloseOnContent(){
-  function bind(el){
-    if(!el) return;
-    if (USE_POINTER) {
-      setupPointerSwipe(el,{ onTap:()=>{ if(!suppressTapClose) closeViewer(); }, enableWhen:()=>true });
-    } else {
-      let sx=0, sy=0, t0=0;
-      el.addEventListener('touchstart', e=>{ const t=e.touches[0]; sx=t.clientX; sy=t.clientY; t0=Date.now(); }, {passive:true});
-      el.addEventListener('touchend', e=>{
-        const t=e.changedTouches[0]; const dx=Math.abs(t.clientX-sx), dy=Math.abs(t.clientY-sy), dt=Date.now()-t0;
-        if(dt<300 && dx<8 && dy<8 && !suppressTapClose) closeViewer();
-      }, {passive:true});
-      el.addEventListener('click', ()=>{ if(!suppressTapClose) closeViewer(); });
-    }
-  }
-  bind(vCaptionEl); bind(vDateEl);
-})();
-
-/* ✔ 이미지 ‘클릭’으로 닫기 (확대 중에도) — PC/안드 폴백 */
-vSlidesEl.addEventListener('click', (e)=>{
-  const img = e.target.closest('.viewer-slide img');
-  if (!img) return;
-  if (suppressTapClose) return; // 제스처 직후 합성 클릭 방지
-  closeViewer();
-});
 
 /* Helper */
 function placeholder(){
