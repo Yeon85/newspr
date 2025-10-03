@@ -1,4 +1,10 @@
 
+앱실행하기 
+https://onestop.khug.or.kr/renterStep01.html?id=K20250729000009
+
+
+
+
 
 …or create a new repository on the command line
 echo "# gittest" >> README.md
