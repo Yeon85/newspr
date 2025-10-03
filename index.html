@@ -315,41 +315,105 @@ io.observe(sentinel);
 /* ================================
    공용 포인터 스와이프 유틸
 ================================ */
-function setupPointerSwipe(container, {
-  onSwipeLeft, onSwipeRight, onTap,
-  lockThreshold = 10,
-  swipeThreshold = 45,
-  enableWhen = () => true
-} = {}) {
-  if (!USE_POINTER) return null;
-  let sx=0, sy=0, dx=0, dy=0, lock=null, tracking=false, pid=null, t0=0;
+/* === drop-in replacement: setupPointerSwipe ===
+   - 수평/수직 잠금
+   - 세로 스크롤 발생 시 탭 무효
+   - 수평으로 확정된 뒤에만 setPointerCapture
+*/
+function setupPointerSwipe(
+  container,
+  {
+    onSwipeLeft,
+    onSwipeRight,
+    onTap,
+    // 값은 상황에 맞게 살짝 조절 가능
+    lockThreshold = 12,     // 제스처 방향 결정 임계치(px)
+    swipeThreshold = 55,    // 스와이프 임계치(px)
+    tapMoveTolerance = 6,   // 탭으로 인정하는 이동 허용치(px)
+    tapTime = 320,          // 탭으로 인정하는 시간(ms)
+    scrollTolerance = 4,    // 탭 동안 허용되는 실제 스크롤 변화(px)
+    enableWhen = () => true
+  } = {}
+){
+  if (!window.PointerEvent) return null;
 
-  const onDown = (e) => {
+  let sx=0, sy=0, dx=0, dy=0;
+  let lock = null;          // 'h' | 'v' | null
+  let tracking = false;
+  let pid = null;
+  let captured = false;
+  let t0 = 0;
+  let startScrollY = 0;
+
+  const getScrollTop = () =>
+    window.pageYOffset ||
+    document.documentElement.scrollTop ||
+    document.body.scrollTop ||
+    0;
+
+  const onDown = (e)=>{
     if (!enableWhen()) return;
-    if (e.target.closest('button,.mini-dots')) return;
-    tracking = true; pid = e.pointerId;
-    container.setPointerCapture?.(pid);
-    sx=e.clientX; sy=e.clientY; dx=0; dy=0; lock=null; t0=Date.now();
+    if (e.target.closest('button, .mini-dots, .viewer-dots')) return;
+
+    tracking = true;
+    pid = e.pointerId;
+    captured = false;      // ❗ 아직은 캡처 금지 (수평 확정 후에만)
+    sx = e.clientX;
+    sy = e.clientY;
+    dx = dy = 0;
+    lock = null;
+    t0 = Date.now();
+    startScrollY = getScrollTop();
   };
-  const onMove = (e) => {
+
+  const onMove = (e)=>{
     if (!tracking) return;
-    dx = e.clientX - sx; dy = e.clientY - sy;
+    dx = e.clientX - sx;
+    dy = e.clientY - sy;
+
+    // 방향 잠금 결정
     if (lock == null && (Math.abs(dx) > lockThreshold || Math.abs(dy) > lockThreshold)) {
       lock = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+
+      // 수평으로 확정된 후에만 capture → 세로 스크롤 방해 안 함
+      if (lock === 'h' && !captured) {
+        container.setPointerCapture?.(pid);
+        captured = true;
+      } else if (lock === 'v' && captured) {
+        try { container.releasePointerCapture?.(pid); } catch {}
+        captured = false;
+      }
     }
   };
-  const onUp = (e) => {
+
+  const onUp = (e)=>{
     if (!tracking) return;
-    const dt = Date.now()-t0;
+    const dt = Date.now() - t0;
+    const scDiff = Math.abs(getScrollTop() - startScrollY);
+
+    // 1) 수평 스와이프
     if (lock === 'h' && Math.abs(dx) > swipeThreshold) {
       dx < 0 ? onSwipeLeft?.() : onSwipeRight?.();
-    } else if (dt < 300 && Math.abs(dx) < lockThreshold && Math.abs(dy) < lockThreshold) {
+    }
+    // 2) 탭: 수직 제스처 아님 + 스크롤 변화 거의 없음 + 이동/시간이 작음
+    else if (lock !== 'v' &&
+             scDiff <= scrollTolerance &&
+             dt < tapTime &&
+             Math.abs(dx) < tapMoveTolerance &&
+             Math.abs(dy) < tapMoveTolerance) {
       onTap?.(e);
     }
-    tracking=false; lock=null;
-    try { container.releasePointerCapture?.(pid); } catch {}
-    pid=null;
+    // 그 외: 아무 것도 안 함 (세로 스크롤로 취급)
+
+    tracking = false;
+    lock = null;
+    if (captured) {
+      try { container.releasePointerCapture?.(pid); } catch {}
+    }
+    captured = false;
+    pid = null;
   };
+
   const onCancel = onUp;
 
   container.addEventListener('pointerdown', onDown);
@@ -368,6 +432,7 @@ function setupPointerSwipe(container, {
     }
   };
 }
+
 
 /* ================================
    Card
