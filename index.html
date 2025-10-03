@@ -149,6 +149,7 @@
 /* ================================
    긴 더미 문장들 (랜덤 조합)
 ================================ */
+const MAX_IMAGES = 10;   // 한 게시물당 최대 10장
 const DUMMY_SENTENCES = [
   "전세보증금 반환을 둘러싼 분쟁이 이어지면서 임차인의 정보 비대칭 해소가 시급하다는 지적이 나온다.",
   "정부는 임대차 신고제 보완과 보증 보험 의무화 확대를 예고했지만 현장의 체감도는 여전히 낮다.",
@@ -321,10 +322,22 @@ function buildCard(row){
    Slider inside card (터치로 열기 + iOS 방향잠금/드래그 방지)
 ================================ */
 function buildMiniSlider(card,srcs,meta){
-  const slider=card.querySelector('.mini-slider');
+   const slider=card.querySelector('.mini-slider');
   const slidesEl=card.querySelector('.mini-slides');
   const dotsEl=card.querySelector('.mini-dots');
   slidesEl.innerHTML=''; dotsEl.innerHTML='';
+
+  const imgs = (srcs || []).slice(0, MAX_IMAGES); // ★ 최대 10장으로 제한
+
+  imgs.forEach((src,i)=>{
+    const s=document.createElement('div'); s.className='mini-slide';
+    s.innerHTML=`<img src="${src}" alt="이미지 ${i+1}">`;
+    slidesEl.appendChild(s);
+
+    const d=document.createElement('div'); d.className='mini-dot';
+    d.addEventListener('click',()=>goTo(slider,i));
+    dotsEl.appendChild(d);
+  });
 
   srcs.forEach((src,i)=>{
     const s=document.createElement('div'); s.className='mini-slide';
@@ -444,19 +457,17 @@ function clampPan(){
 }
 
 function openViewer(imgs, caption, date){
-  vSlidesEl.innerHTML = '';
-  vDotsEl.innerHTML = '';
-  imgs.forEach((src, i)=>{
-    const s = document.createElement('div');
-    s.className = 'viewer-slide';
-    const img = new Image();
-    img.src = src; img.alt = `이미지 ${i+1}`;
-    img.setAttribute('draggable','false'); /* iOS 드래그 방지 */
-    s.appendChild(img);
+  const list = (imgs || []).slice(0, MAX_IMAGES); // ★ 최대 10장으로 제한
+
+  vSlidesEl.innerHTML=''; 
+  vDotsEl.innerHTML='';
+
+  list.forEach((src,i)=>{
+    const s=document.createElement('div'); s.className='viewer-slide';
+    s.innerHTML=`<img src="${src}" alt="이미지 ${i+1}">`;
     vSlidesEl.appendChild(s);
 
-    const d = document.createElement('div');
-    d.className = 'viewer-dot';
+    const d=document.createElement('div'); d.className='viewer-dot';
     d.addEventListener('click', (e)=>{ e.stopPropagation(); viewerGoTo(i); });
     vDotsEl.appendChild(d);
   });
@@ -470,10 +481,11 @@ function openViewer(imgs, caption, date){
   backdrop.style.display='block';
   viewer.setAttribute('aria-hidden','false');
   document.addEventListener('keydown', escCloseOnce);
-  document.body.classList.add('no-scroll');   // 배경 스크롤 잠금
-
-  stopAutoplay(); // 기본 정지
+  document.body.classList.add('no-scroll');
+  stopAutoplay();
 }
+
+
 function closeViewer(){
   stopAutoplay();
   viewer.style.display='none';
