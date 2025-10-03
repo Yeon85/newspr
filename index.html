@@ -81,7 +81,7 @@
   .viewer-nav{position:absolute;top:50%;left:0;right:0;display:flex;justify-content:space-between;transform:translateY(-50%);pointer-events:none;}
   .viewer-nav button{pointer-events:auto;border:none;background:rgba(0,0,0,.35);color:#fff;width:36px;height:36px;border-radius:50%;cursor:pointer}
 
-  .viewer-caption{margin-top:8px;font-size:14px;line-height:1.6;color:#222}
+  .viewer-caption{margin-top:8px;font-size:14px;line-height:1.8;color:#222;max-height:6lh;overflow:auto}
   .viewer-meta{display:flex;justify-content:flex-end;color:#666;font-size:12px;margin-top:8px}
   .viewer-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
   .viewer-actions .ghost{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 14px;cursor:pointer}
@@ -94,6 +94,22 @@
   .spinner-wrap{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(255,255,255,.6);z-index:2}
   .spinner{width:32px;height:32px;border-radius:50%;border:3px solid #ccc;border-top-color:var(--brand);animation:sp 1s linear infinite}
   @keyframes sp{to{transform:rotate(360deg)}}
+
+  /* ===== 문장 하이라이트(형광펜) ===== */
+  .viewer-caption .seg{
+    padding: 0 2px;
+    border-radius: 4px;
+    transition: background-color .2s ease, box-shadow .2s ease;
+  }
+  .viewer-caption .seg.is-reading{
+    background: linear-gradient(transparent 55%, #fff59d 0);
+    box-shadow: inset 0 -6px 0 #fff59d;
+  }
+  .viewer-caption .seg:hover{
+    background: linear-gradient(transparent 55%, #e8f0fe 0);
+    box-shadow: inset 0 -6px 0 #e8f0fe;
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -243,7 +259,7 @@ async function fetchPageFromServer(type,cursor,limit){
   const items=[];
   for(let i=start;i<end;i++){
     const id=`${type}-${i}`, seed=`${type}-${i}-${randInt(1,9999)}`;
-    const imgCount = 3; // 최대 10장까지 바꿔도 됨
+    const imgCount = 3;
     const images=[];
     for(let k=1;k<=imgCount;k++){
       images.push(`https://picsum.photos/seed/${seed}-${k}/560/700`);
@@ -403,7 +419,8 @@ let isAutoplaying = false;
 
 /* ===== TTS(글자 읽기) ===== */
 let ttsEnabled = false;
-let ttsVoice = null;
+let isPaused   = false;      // ✨ 일시정지 상태 표시 (하이라이트 유지)
+let ttsVoice   = null;
 
 function pickKoVoice(){
   if (!('speechSynthesis' in window)) return;
@@ -416,25 +433,141 @@ if ('speechSynthesis' in window) {
   pickKoVoice();
   window.speechSynthesis.addEventListener('voiceschanged', pickKoVoice);
 }
-function composeCaptionForTTS(){
-  const cap  = (vCaptionEl?.textContent || '').trim();
-  const date = (vDateEl?.textContent || '').trim();
-  const total= vSlidesEl.children.length;
-  const n    = vIdx+1;
-  return [date, cap, `${n}번째 이미지, 총 ${total}장 중.`].filter(Boolean).join(' ');
+
+/* ===== 문장 단위 분할 & 하이라이트 ===== */
+function splitSentencesKorean(text) {
+  if (!text) return [];
+  const trimmed = text.replace(/\s+/g, ' ').trim();
+  const roughParts = trimmed.split(/[\n\r]+|[•·▪●‣◦]+/).map(s => s.trim()).filter(Boolean);
+  const out = [];
+  const re = /(.+?(?:[\.!?…]+|(?:다|요|습니다|습니까|네요|군요|랍니다|였다|된다|했다|일까|일까요|일수도 있다)\s*(?:요)?)(?=\s|$)|.+?$)/g;
+  for (const part of roughParts) {
+    const segs = part.match(re) || [];
+    for (let seg of segs) {
+      seg = seg.trim();
+      if (!seg) continue;
+      if (seg.length > 70) {
+        const chunks = seg.match(/.{1,55}(?:\s|$)/g) || [seg];
+        chunks.forEach(c => out.push(c.trim()));
+      } else {
+        out.push(seg);
+      }
+    }
+  }
+  return out;
 }
-function ttsSpeak(text){
-  if (!('speechSynthesis' in window)) { alert('이 브라우저는 음성합성을 지원하지 않습니다.'); return; }
-  if (!text) return;
-  speechSynthesis.cancel();
+
+let captionSegNodes = [];
+let captionSegIndex = 0;  // 현재(혹은 마지막 하이라이트) 인덱스
+let ttsCurrentUtter = null;
+
+function renderCaptionAsSegments(text) {
+  captionSegNodes = [];
+  // 재렌더 시 현재 인덱스는 0으로
+  captionSegIndex = 0;
+  vCaptionEl.innerHTML = '';
+  const segs = splitSentencesKorean(text);
+  if (segs.length === 0) return;
+
+  const frag = document.createDocumentFragment();
+  segs.forEach((s, i) => {
+    const span = document.createElement('span');
+    span.className = 'seg';
+    span.textContent = s;
+    span.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // 클릭 시 그 문장부터 재생
+      if (!ttsEnabled) { ttsEnabled = true; }
+      isPaused = false;
+      stopAutoplay();
+      startSegmentTTS(i);
+    });
+    frag.appendChild(span);
+    if (i !== segs.length - 1) frag.appendChild(document.createTextNode(' '));
+    captionSegNodes.push(span);
+  });
+  vCaptionEl.appendChild(frag);
+}
+
+function paintCurrentSegment(idx) {
+  captionSegNodes.forEach((n, k) => n.classList.toggle('is-reading', k === idx));
+  const node = captionSegNodes[idx];
+  if (node) {
+    const rect = node.getBoundingClientRect();
+    const box = vCaptionEl.getBoundingClientRect();
+    if (rect.top < box.top || rect.bottom > box.bottom + 60) {
+      node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+}
+
+function speakOneSentence(text, onend) {
+  if (!('speechSynthesis' in window)) return;
   const u = new SpeechSynthesisUtterance(text);
   if (ttsVoice) u.voice = ttsVoice;
-  u.lang  = ttsVoice?.lang || 'ko-KR';
-  u.rate  = 1.0;
+  u.lang = ttsVoice?.lang || 'ko-KR';
+  u.rate = 1.0;
   u.pitch = 1.0;
+  u.onend = () => { ttsCurrentUtter = null; onend && onend(); };
+  u.onerror = () => { ttsCurrentUtter = null; onend && onend(); };
+  ttsCurrentUtter = u;
   speechSynthesis.speak(u);
 }
-function ttsStop(){ try{ speechSynthesis.cancel(); }catch(_){ } }
+
+function startSegmentTTS(startIdx = 0) {
+  if (!captionSegNodes.length) return;
+  // 시작 위치 세팅: 일시정지에서 재시작이면 현재 인덱스 유지
+  captionSegIndex = Math.max(0, Math.min(captionSegNodes.length - 1, startIdx));
+  ttsEnabled = true;
+  isPaused   = false;
+  vPlayBtn.textContent = '일시정지';
+  stopAutoplay(); // 슬라이드 자동 넘김과 독립
+
+  function step() {
+    if (!ttsEnabled || isPaused) return;
+    const span = captionSegNodes[captionSegIndex];
+    if (!span) { finishReadingUI(); return; }
+    paintCurrentSegment(captionSegIndex);
+    const text = span.textContent.trim();
+    speakOneSentence(text, () => {
+      if (!ttsEnabled || isPaused) return;
+      captionSegIndex++;
+      if (captionSegIndex >= captionSegNodes.length) {
+        finishReadingUI();
+      } else {
+        step();
+      }
+    });
+  }
+
+  try { speechSynthesis.cancel(); } catch(_) {}
+  step();
+}
+
+function pauseSegmentTTS() {
+  // ✨ 일시정지: 하이라이트 유지, 음성만 멈춤
+  isPaused = true;
+  try { speechSynthesis.cancel(); } catch(_) {}
+  vPlayBtn.textContent = '재생';
+  // 하이라이트는 제거하지 않음(그대로 유지)
+}
+
+function finishReadingUI() {
+  // 끝났을 때는 모두 초기화
+  ttsEnabled = false;
+  isPaused   = false;
+  vPlayBtn.textContent = '재생';
+  captionSegNodes.forEach(n => n.classList.remove('is-reading'));
+}
+
+function stopAllReadingImmediately() {
+  // 닫기 등에서 완전 종료 (하이라이트 제거)
+  ttsEnabled = false;
+  isPaused   = false;
+  try { speechSynthesis.cancel(); } catch(_) {}
+  vPlayBtn.textContent = '재생';
+  captionSegNodes.forEach(n => n.classList.remove('is-reading'));
+}
 
 /* Zoom/Pan state */
 let zScale = 1, zTx = 0, zTy = 0;
@@ -458,7 +591,7 @@ function openViewer(imgs, caption, date){
   vSlidesEl.innerHTML=''; vDotsEl.innerHTML='';
   showSpinner(true);
   let loadedCount = 0;
-  const need = Math.min(imgs.length, 1); // 첫 장만 로딩되면 우선 오픈 느낌 개선
+  const need = Math.min(imgs.length, 1);
 
   imgs.forEach((src,i)=>{
     const s=document.createElement('div'); s.className='viewer-slide';
@@ -472,19 +605,22 @@ function openViewer(imgs, caption, date){
     const d=document.createElement('div'); d.className='viewer-dot'; d.addEventListener('click', (e)=>{ e.stopPropagation(); viewerGoTo(i); }); vDotsEl.appendChild(d);
   });
 
-  vCaptionEl.textContent = caption||''; vDateEl.textContent = date||'';
+  // ✨ 문장 하이라이트 렌더
+  renderCaptionAsSegments(caption || '');
+  vDateEl.textContent = date || '';
+
   vIdx=0; viewerUpdate(); resetZoom();
 
   viewer.style.display='block'; backdrop.style.display='block';
   viewer.setAttribute('aria-hidden','false');
   document.body.classList.add('no-scroll');
 
-  stopAutoplay(); ttsEnabled=false; ttsStop();
+  stopAutoplay();
+  stopAllReadingImmediately(); // 새로 열 때는 초기화 상태로
 }
 function closeViewer(){
   stopAutoplay();
-  ttsEnabled = false;
-  ttsStop();
+  stopAllReadingImmediately(); // 닫을 때 완전 종료 + 하이라이트 제거
   viewer.style.display='none'; backdrop.style.display='none';
   viewer.setAttribute('aria-hidden','true');
   document.body.classList.remove('no-scroll');
@@ -498,21 +634,31 @@ function viewerUpdate(){
   const total = vSlidesEl.children.length;
   vNextBtn.disabled = (vIdx===total-1);
 
-  //if (ttsEnabled){ ttsStop(); ttsSpeak(composeCaptionForTTS()); }
+  // 슬라이드 변경 시에도 문장 읽기는 유지 (중단하지 않음)
+  // if (ttsEnabled){ ttsStop(); ttsSpeak(composeCaptionForTTS()); }
 }
 
-/* Autoplay */
-function startAutoplay(){ if(isAutoplaying) return; isAutoplaying=true; vPlayBtn.textContent='일시정지';
-  autoplayTimer=setInterval(()=>{ const total=vSlidesEl.children.length; if(vIdx>=total-1) viewerGoTo(0); else viewerStep(+1); }, AUTOPLAY_MS); }
-function stopAutoplay(){ isAutoplaying=false; vPlayBtn.textContent='재생'; if(autoplayTimer){clearInterval(autoplayTimer); autoplayTimer=null;} }
+/* Autoplay(이미지 슬라이드) */
+function startAutoplay(){
+  if(isAutoplaying) return;
+  isAutoplaying=true; vPlayBtn.textContent='일시정지';
+  autoplayTimer=setInterval(()=>{
+    const total=vSlidesEl.children.length;
+    if(vIdx>=total-1) viewerGoTo(0); else viewerStep(+1);
+  }, AUTOPLAY_MS);
+}
+function stopAutoplay(){
+  isAutoplaying=false;
+  if(autoplayTimer){clearInterval(autoplayTimer); autoplayTimer=null;}
+}
 
-/* Share (파일 + 텍스트 + URL 최대한 같이) */
+/* Share (파일 + 텍스트 + URL) */
 async function shareCurrent(){
   const img=viewerImgEl(); if(!img) return;
-  const pageUrl = location.href;             // 페이지 URL
-  const imgUrl  = img.src;                   // 이미지 URL
+  const pageUrl = location.href;
+  const imgUrl  = img.src;
   const title   = (pageTitleEl?.textContent||'뉴스&홍보');
-  const text    = [vCaptionEl.textContent||'', vDateEl.textContent||'', pageUrl].filter(Boolean).join('\n');
+  const text    = [(vCaptionEl.textContent||'').trim(), (vDateEl.textContent||'').trim(), pageUrl].filter(Boolean).join('\n');
 
   const prev=vShareBtn.textContent; vShareBtn.disabled=true; vShareBtn.textContent='공유 준비 중…';
   try{
@@ -523,16 +669,13 @@ async function shareCurrent(){
       file=new File([blob],`image.${ext}`,{type:mime});
     }catch(_){}
 
-    // 1) 파일+텍스트+URL (플랫폼 따라 URL가 무시될 수 있음)
     if(file && navigator.canShare && navigator.canShare({files:[file]})){
       try{ await navigator.share({ title, text, url: pageUrl, files:[file] }); vShareBtn.disabled=false; vShareBtn.textContent=prev; return; }catch(e){}
     }
-    // 2) 텍스트+URL만
     if(navigator.share){
       await navigator.share({ title, text, url: pageUrl });
       vShareBtn.disabled=false; vShareBtn.textContent=prev; return;
     }
-    // 3) 클립보드 복사 폴백
     if(navigator.clipboard){
       await navigator.clipboard.writeText(`${text}\n${imgUrl}`);
       alert('텍스트와 링크가 클립보드에 복사되었습니다.');
@@ -553,26 +696,26 @@ async function shareCurrent(){
   }
 }
 
-/* 컨트롤(닫기 외)은 전파 차단만, 닫기는 '닫기' 버튼만 */
+/* 컨트롤 전파 차단 */
 [vPrevBtn, vNextBtn, vListBtn, vShareBtn, vPlayBtn].forEach(btn=>btn.addEventListener('click', e=>e.stopPropagation()));
 vPrevBtn.addEventListener('click', ()=> viewerStep(-1));
 vNextBtn.addEventListener('click', ()=> viewerStep(+1));
 vListBtn .addEventListener('click', closeViewer);
 vShareBtn.addEventListener('click', shareCurrent);
+
+/* ✨ 재생 버튼: 일시정지 유지 하이라이트 + 재개 시 같은 문장부터 */
 vPlayBtn .addEventListener('click', ()=>{
-  if (isAutoplaying){
-    stopAutoplay();
-    ttsEnabled = false;
-    ttsStop();
+  if (ttsEnabled && !isPaused){
+    // → 일시정지(하이라이트 유지)
+    pauseSegmentTTS();
     return;
   }
-  // 시작: 자동 슬라이드 + 읽어주기 ON
-  ttsEnabled = true;
-  //startAutoplay();
-  ttsSpeak(composeCaptionForTTS());
+  // (재)시작: 현재 하이라이트된 인덱스 기준
+  const resumeIdx = Math.max(0, Math.min(captionSegNodes.length-1, captionSegIndex));
+  startSegmentTTS(resumeIdx);
 });
-vCloseBtn.addEventListener('click', closeViewer);       // ← 닫기 버튼만 닫힘
-// 배경/시트 클릭, ESC 등은 닫히지 않도록 핸들러 미등록
+
+vCloseBtn.addEventListener('click', closeViewer);
 
 /* Viewer: 슬라이드 스와이프(확대 안했을 때) */
 let vStartX=null, vStartY=null, vHLock=false;
