@@ -369,7 +369,6 @@ function buildMiniSlider(card,srcs,meta){
       onSwipeLeft: ()=>goStep(slider,+1),
       onSwipeRight:()=>goStep(slider,-1),
       onTap:(e)=>{
-        // 버튼/도트가 아니면 어디를 눌러도 열기 (PC pointercapture 이슈 대응)
         if (e.target.closest('button') || e.target.closest('.mini-dots')) return;
         openViewer(srcs, meta?.title||'', meta?.date||'');
       },
@@ -397,7 +396,7 @@ function buildMiniSlider(card,srcs,meta){
     }, {passive:true});
   }
 
-  // ✅ 환경과 무관하게 ‘클릭’으로도 항상 열리게 (버튼/도트는 제외)
+  // 환경과 무관하게 ‘클릭’으로도 항상 열리게 (버튼/도트는 제외)
   slider.addEventListener('click', (e)=>{
     if (e.target.closest('button') || e.target.closest('.mini-dots')) return;
     if (Date.now() - _lastOpenAt < 350) return; // onTap 직후 click 중복 방지
@@ -526,12 +525,14 @@ vListBtn .addEventListener('click', closeViewer);
 vShareBtn.addEventListener('click', shareCurrent);
 vPlayBtn .addEventListener('click', ()=>{ isAutoplaying ? stopAutoplay() : startAutoplay(); });
 
-/* Viewer: Pointer 스와이프 + 이미지 탭 닫기 (zScale===1에서만) */
+/* Viewer: Pointer 스와이프 + 이미지 탭 닫기 (✔ 확대 중에도 닫힘) */
 if (USE_POINTER) {
   setupPointerSwipe(vSliderBox,{
     onSwipeLeft: ()=>{ if(zScale===1) viewerStep(+1); },
     onSwipeRight:()=>{ if(zScale===1) viewerStep(-1); },
-    onTap:(e)=>{ if(zScale===1 && !suppressTapClose && e.target.tagName==='IMG') closeViewer(); },
+    onTap:(e)=>{
+      if(!suppressTapClose && e.target.tagName==='IMG') closeViewer(); // zScale 무시하고 닫기
+    },
     enableWhen:()=>true
   });
 }
@@ -564,7 +565,7 @@ vSlidesEl.addEventListener('touchend', ()=>{
 backdrop.addEventListener('click', e=>e.stopPropagation());
 viewer.addEventListener('click', e=>e.stopPropagation());
 
-/* 캡션/날짜 탭 시 닫기 */
+/* 캡션/날짜 탭 시 닫기 (그대로 유지) */
 (function addTapToCloseOnContent(){
   function bind(el){
     if(!el) return;
@@ -582,6 +583,14 @@ viewer.addEventListener('click', e=>e.stopPropagation());
   }
   bind(vCaptionEl); bind(vDateEl);
 })();
+
+/* ✔ 이미지 ‘클릭’으로 닫기 (확대 중에도) — PC/안드 폴백 */
+vSlidesEl.addEventListener('click', (e)=>{
+  const img = e.target.closest('.viewer-slide img');
+  if (!img) return;
+  if (suppressTapClose) return; // 제스처 직후 합성 클릭 방지
+  closeViewer();
+});
 
 /* Helper */
 function placeholder(){
