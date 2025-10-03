@@ -507,7 +507,7 @@ async function shareCurrent(){
   const img = viewerImgEl();
   if (!img) return;
 
-   const title   = (pageTitleEl?.textContent || '뉴스&홍보');
+  const title   = (pageTitleEl?.textContent || '뉴스&홍보');
   const text    = (vCaptionEl.textContent || '').trim();
   const pageUrl = location.href;   // 현재 페이지 주소
   const imgUrl  = img.src;
@@ -546,13 +546,13 @@ async function shareCurrent(){
     if (file && await tryShare({ title, text: fullText, url: pageUrl, files: [file] })) return;
 
     // (B) 파일 + 텍스트 (URL은 텍스트에 포함돼 있으므로 ok)
-    if (file && await tryShare({ title, text: fullText, files: [file] })) return;
+    //if (file && await tryShare({ title, text: fullText, files: [file] })) return;
 
     // (C) 텍스트 + URL (파일 불가 환경: iOS Safari 등)
-    if (await tryShare({ title, text, url: pageUrl })) return;
+    //if (await tryShare({ title, text, url: pageUrl })) return;
 
     // (D) 텍스트만
-    if (await tryShare({ title, text: fullText })) return;
+    //if (await tryShare({ title, text: fullText })) return;
 
     // 3) 클립보드 폴백 (가능하면 이미지+텍스트 동시)
     if (navigator.clipboard) {
