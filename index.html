@@ -36,10 +36,10 @@
   .mini-slides{display:flex;transition:transform .35s ease}
   .mini-slide{min-width:100%}
   .mini-slide img{
-    display:block;width:100%;aspect-ratio:4/5;object-fit:cover; /* 280×350 비율 */
+    display:block;width:100%;aspect-ratio:4/5;object-fit:cover;  /* 280×350 비율 */
     cursor:pointer;-webkit-user-drag:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
   }
-  /* iOS 안정화: 가로 스와이프 중 페이지 스크롤 억제(세로만 허용) */
+  /* iOS/Android 안정화: 가로 스와이프 중 페이지 스크롤 억제(세로만 허용) */
   .mini-slider, .mini-slides, .mini-slide, .mini-slide img { touch-action: pan-y; }
 
   /* ‹ › : 두 번째 장부터 보이기 */
@@ -149,12 +149,31 @@
 
 <script>
 /* ================================
-   상수/유틸
+   상수/유틸/가드
 ================================ */
 const PAGE_SIZE=20, MAX_DOM_CARDS=120, EST_CARD_HEIGHT=470;
-const MAX_IMAGES = 10;            // 사진 최대 10장
+const MAX_IMAGES = 10;                 // 사진 최대 10장
 const USE_POINTER = !!window.PointerEvent;
-let _lastOpenAt = 0;              // 연속 오픈 가드
+
+/* 고스트 클릭/중복 오픈/즉시 닫힘 가드 */
+const OPEN_GUARD_MS  = 350;
+const CLOSE_GUARD_MS = 250;
+let lastOpenTs  = 0;
+let lastCloseTs = 0;
+
+function canOpenNow(){
+  const now = Date.now();
+  return (now - lastOpenTs > OPEN_GUARD_MS) && (now - lastCloseTs > 120);
+}
+function noteClosed(){ lastCloseTs = Date.now(); }
+function justOpenedShield(){
+  lastOpenTs = Date.now();
+  // Android의 합성 클릭 한번 흡수
+  const swallow=(ev)=>{ ev.stopPropagation(); ev.preventDefault(); cleanup(); };
+  const cleanup = ()=> document.removeEventListener('click', swallow, true);
+  document.addEventListener('click', swallow, true);
+  setTimeout(cleanup, OPEN_GUARD_MS);
+}
 
 const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
@@ -298,8 +317,8 @@ io.observe(sentinel);
 ================================ */
 function setupPointerSwipe(container, {
   onSwipeLeft, onSwipeRight, onTap,
-  lockThreshold = 10,  // 이 이상 움직이면 방향 잠금
-  swipeThreshold = 45, // 이 이상 가로 이동이면 스와이프 인정
+  lockThreshold = 10,
+  swipeThreshold = 45,
   enableWhen = () => true
 } = {}) {
   if (!USE_POINTER) return null;
@@ -307,7 +326,7 @@ function setupPointerSwipe(container, {
 
   const onDown = (e) => {
     if (!enableWhen()) return;
-    if (e.target.closest('button,.mini-dots')) return; // 버튼/도트 제외
+    if (e.target.closest('button,.mini-dots')) return;
     tracking = true; pid = e.pointerId;
     container.setPointerCapture?.(pid);
     sx=e.clientX; sy=e.clientY; dx=0; dy=0; lock=null; t0=Date.now();
@@ -318,7 +337,6 @@ function setupPointerSwipe(container, {
     if (lock == null && (Math.abs(dx) > lockThreshold || Math.abs(dy) > lockThreshold)) {
       lock = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
     }
-    // touch-action: pan-y 가 가로 스와이프 중 페이지 스크롤을 자동 억제
   };
   const onUp = (e) => {
     if (!tracking) return;
@@ -381,7 +399,7 @@ function buildCard(row){
 }
 
 /* ================================
-   메인 슬라이더 (Pointer 이벤트로 iOS 안정화)
+   메인 슬라이더 (Pointer 이벤트 + 탭 오픈 가드)
 ================================ */
 function buildMiniSlider(card,srcs,meta){
   const slider=card.querySelector('.mini-slider');
@@ -389,7 +407,7 @@ function buildMiniSlider(card,srcs,meta){
   const dotsEl=card.querySelector('.mini-dots');
   slidesEl.innerHTML=''; dotsEl.innerHTML='';
 
-  const imgs=(srcs||[]).slice(0,MAX_IMAGES); // ★ 10장 제한
+  const imgs=(srcs||[]).slice(0,MAX_IMAGES);
   imgs.forEach((src,i)=>{
     const s=document.createElement('div'); s.className='mini-slide';
     s.innerHTML=`<img src="${src}" alt="이미지 ${i+1}">`; 
@@ -404,15 +422,14 @@ function buildMiniSlider(card,srcs,meta){
   card.querySelector('.mini-prev').addEventListener('click',()=>goStep(slider,-1));
   card.querySelector('.mini-next').addEventListener('click',()=>goStep(slider,+1));
 
-  // ✅ 포인터 스와이프 (iOS 포함 모든 플랫폼)
+  // 포인터 스와이프 + 탭 오픈(안드로이드 고스트클릭 대비 가드)
   setupPointerSwipe(slider, {
     onSwipeLeft:  ()=> goStep(slider,+1),
     onSwipeRight: ()=> goStep(slider,-1),
     onTap: (e)=>{
-      if (e.target.closest('button,.mini-dots')) return; // 버튼/도트 탭은 제외
-      // 중복 오픈 가드
-      if (Date.now()-_lastOpenAt < 350) return;
-      _lastOpenAt = Date.now();
+      if (e.target.closest('button,.mini-dots')) return;
+      if (!canOpenNow()) return;
+      e.preventDefault(); e.stopPropagation();
       openViewer(imgs, meta?.title||'', meta?.date||'');
     },
     lockThreshold: 10,
@@ -420,13 +437,14 @@ function buildMiniSlider(card,srcs,meta){
     enableWhen: ()=> true
   });
 
-  // 클릭 열기(마우스)
-  slider.addEventListener('click', (e)=>{
-    if (e.target.closest('button,.mini-dots')) return;
-    if (Date.now()-_lastOpenAt < 350) return;
-    _lastOpenAt = Date.now();
-    openViewer(imgs, meta?.title||'', meta?.date||'');
-  });
+  // 클릭 폴백: PointerEvent 미지원 환경에서만
+  if (!USE_POINTER){
+    slider.addEventListener('click', (e)=>{
+      if (e.target.closest('button,.mini-dots')) return;
+      if (!canOpenNow()) return;
+      openViewer(imgs, meta?.title||'', meta?.date||'');
+    });
+  }
 
   setIndex(slider,0);
 }
@@ -484,7 +502,7 @@ function clampPan(){ const boxW=vSliderBox.clientWidth, boxH=vSliderBox.clientHe
 
 function openViewer(imgs, caption, date){
   vSlidesEl.innerHTML=''; vDotsEl.innerHTML='';
-  const list=(imgs||[]).slice(0,MAX_IMAGES); // ★ 10장 제한
+  const list=(imgs||[]).slice(0,MAX_IMAGES);
   list.forEach((src,i)=>{
     const s=document.createElement('div'); s.className='viewer-slide';
     s.innerHTML=`<img src="${src}" alt="이미지 ${i+1}">`;
@@ -501,6 +519,9 @@ function openViewer(imgs, caption, date){
   document.addEventListener('keydown', escCloseOnce);
   document.body.classList.add('no-scroll');
   stopAutoplay();
+
+  /* 방금 열린 뒤 합성 클릭 흡수 (Android) */
+  justOpenedShield();
 }
 function closeViewer(){
   stopAutoplay();
@@ -508,6 +529,7 @@ function closeViewer(){
   viewer.setAttribute('aria-hidden','true');
   document.removeEventListener('keydown', escCloseOnce);
   document.body.classList.remove('no-scroll');
+  noteClosed();
 }
 function escCloseOnce(e){ if(e.key==='Escape') closeViewer(); if(e.key==='ArrowLeft') viewerStep(-1); if(e.key==='ArrowRight') viewerStep(+1); }
 
@@ -543,16 +565,20 @@ async function shareCurrent(){
   }finally{ vShareBtn.disabled=false; vShareBtn.textContent=prev; }
 }
 
-/* 닫힘/컨트롤 */
+/* 배경/시트 탭은 닫힘 없음(요청대로) */
 backdrop.addEventListener('click', e=>e.stopPropagation());
 viewer  .addEventListener('click', e=>e.stopPropagation());
 
-vSlidesEl.addEventListener('click', (e)=>{ // 이미지 클릭 시 닫기
+/* 이미지 클릭으로만 닫기 (스와이프/핀치 직후 합성 탭은 무시 / 방금 오픈은 무시) */
+vSlidesEl.addEventListener('click', (e)=>{
   if (e.target && e.target.tagName === 'IMG'){
-    if (!suppressTapClose) closeViewer();
+    if (suppressTapClose) return;
+    if (Date.now() - lastOpenTs < 150) return;
+    closeViewer();
   }
 });
 
+/* 컨트롤 */
 [vPrevBtn, vNextBtn, vCloseBtn, vListBtn, vShareBtn, vPlayBtn].forEach(btn=>{
   btn.addEventListener('click', (e)=> e.stopPropagation());
 });
